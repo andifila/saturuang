@@ -13,15 +13,13 @@ export default function App() {
   const [screen, setScreen] = useState('start')
   const [totalPhotos, setTotalPhotos] = useState(4)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
-  const [selectedPrice, setSelectedPrice] = useState(25000)
   const [capturedPhotos, setCapturedPhotos] = useState([])
 
   const goTo = (next) => setScreen(next)
 
-  const handleConfigDone = ({ photos, template, amount }) => {
+  const handleConfigDone = ({ photos, template }) => {
     setTotalPhotos(photos)
     setSelectedTemplate(template)
-    setSelectedPrice(amount)
     goTo('payment')
   }
 
@@ -33,7 +31,6 @@ export default function App() {
   const handleRestart = () => {
     setTotalPhotos(4)
     setSelectedTemplate(null)
-    setSelectedPrice(25000)
     setCapturedPhotos([])
     goTo('start')
   }

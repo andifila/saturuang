@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 const PHOTO_OPTIONS = [
-  { value: 2, label: '2 Foto', desc: 'Strip Pendek', price: 'Rp 15.000', amount: 15000 },
-  { value: 4, label: '4 Foto', desc: 'Strip Klasik', price: 'Rp 25.000', amount: 25000, popular: true },
-  { value: 8, label: '8 Foto', desc: 'Edisi Lengkap', price: 'Rp 40.000', amount: 40000 },
+  { value: 2, label: '2 Foto', desc: 'Strip Pendek', price: 'Rp 15.000' },
+  { value: 4, label: '4 Foto', desc: 'Strip Klasik', price: 'Rp 25.000', popular: true },
+  { value: 8, label: '8 Foto', desc: 'Edisi Lengkap', price: 'Rp 40.000' },
 ]
 
 const TEMPLATES = [
@@ -18,7 +18,7 @@ const TEMPLATES = [
 function StripPreview({ tmpl, photoCount, selected }) {
   const cols = photoCount === 2 ? 1 : 2
   const rows = photoCount === 8 ? 4 : 2
-  const slots = Array.from({ length: Math.min(photoCount, cols * rows) })
+  const slots = Array.from({ length: photoCount })
 
   return (
     <div
@@ -188,7 +188,7 @@ export default function ConfigScreen({ onDone }) {
 
       {/* Next button */}
       <motion.button
-        onClick={() => onDone({ photos, template, amount: PHOTO_OPTIONS.find(o => o.value === photos).amount })}
+        onClick={() => onDone({ photos, template })}
         whileTap={{ scale: 0.96 }}
         whileHover={{ scale: 1.02 }}
         className="px-16 py-4 rounded-2xl font-bold tracking-widest uppercase text-sm"

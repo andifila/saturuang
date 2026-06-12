@@ -1,32 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const SIMULATE_LOADING_MS = 1500  // lama spinner "generate QRIS"
 const SIMULATE_SUCCESS_MS = 6000  // detik setelah QR muncul → auto sukses
-const PAYMENT_TIMEOUT_SECONDS = Math.ceil(SIMULATE_SUCCESS_MS / 1000)
+const PAYMENT_TIMEOUT_SECONDS = SIMULATE_SUCCESS_MS / 1000
+
+const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
+const formatRupiah = n => `Rp ${n.toLocaleString('id-ID')}`
 
 export default function PaymentScreen({ totalPhotos, onSuccess }) {
   const [phase, setPhase] = useState('loading') // loading | ready | success
   const [secondsLeft, setSecondsLeft] = useState(PAYMENT_TIMEOUT_SECONDS)
 
-  const countdownRef = useRef(null)
-
-  // Simulasi: spinner → QR muncul
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPhase('ready')
-    }, SIMULATE_LOADING_MS)
+    const t = setTimeout(() => setPhase('ready'), SIMULATE_LOADING_MS)
     return () => clearTimeout(t)
   }, [])
 
-  // Countdown + auto-sukses saat QR tampil
   useEffect(() => {
     if (phase !== 'ready') return
 
-    countdownRef.current = setInterval(() => {
+    const intervalId = setInterval(() => {
       setSecondsLeft(prev => {
         if (prev <= 1) {
-          clearInterval(countdownRef.current)
           setPhase('success')
           return 0
         }
@@ -34,7 +30,7 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
       })
     }, 1000)
 
-    return () => clearInterval(countdownRef.current)
+    return () => clearInterval(intervalId)
   }, [phase])
 
   // Pindah ke CaptureScreen setelah animasi sukses
@@ -44,8 +40,7 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
     return () => clearTimeout(t)
   }, [phase, onSuccess])
 
-  const PRICE_MAP = { 2: 'Rp 15.000', 4: 'Rp 25.000', 8: 'Rp 40.000' }
-  const displayPrice = PRICE_MAP[totalPhotos] ?? 'Rp 25.000'
+  const displayPrice = formatRupiah(PRICE_TABLE[totalPhotos] ?? 25000)
 
   return (
     <motion.div

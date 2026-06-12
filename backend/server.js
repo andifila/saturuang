@@ -24,6 +24,8 @@ const midtrans = new midtransClient.CoreApi({
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
 })
 
+const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
+
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
 app.use('/outputs', express.static(OUTPUTS_DIR))
@@ -101,8 +103,6 @@ app.post('/api/print', asyncHandler(async (req, res) => {
   await printPhoto(filePath)
   res.json({ ok: true })
 }))
-
-const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
 
 // POST /api/generate-qris
 // Body  : { totalPhotos: number }

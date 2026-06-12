@@ -28,6 +28,9 @@ const DEFAULT_STYLE = TEMPLATE_STYLES.minimal
 
 const TEMPLATES_DIR = path.join(__dirname, 'templates')
 
+// Cache rasterized label PNGs — one per template, computed once
+const labelCache = new Map()
+
 function base64ToBuffer(dataUrl) {
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
   return Buffer.from(base64, 'base64')
@@ -59,32 +62,37 @@ async function compositePhoto(photos, templateId, outputDir) {
   const cellW = Math.floor((areaW - GAP * (layout.cols - 1)) / layout.cols)
   const cellH = Math.floor((areaH - GAP * (layout.rows - 1)) / layout.rows)
 
-  // Resize each photo into its cell
-  const photoLayers = await Promise.all(
-    photos.slice(0, count).map(async (photo, i) => {
-      const buf     = base64ToBuffer(photo)
-      const resized = await sharp(buf)
-        .resize(cellW, cellH, { fit: 'cover', position: 'attention' })
-        .toBuffer()
-
-      const col = i % layout.cols
-      const row = Math.floor(i / layout.cols)
-
-      return {
-        input: resized,
-        left:  PADDING + col * (cellW + GAP),
-        top:   PADDING + row * (cellH + GAP),
-      }
-    })
-  )
-
-  // Bottom label strip (SVG rendered as image layer)
-  const labelSvg = makeLabelSvg(PRINT_W, LABEL_H, style.labelText, style.labelBg, style.labelColor)
-  const labelLayer = {
-    input: await sharp(labelSvg).png().toBuffer(),
-    left: 0,
-    top:  PRINT_H - LABEL_H,
+  // Resize photos + rasterize label in parallel
+  const getLabelBuffer = () => {
+    if (!labelCache.has(templateId)) {
+      const svg = makeLabelSvg(PRINT_W, LABEL_H, style.labelText, style.labelBg, style.labelColor)
+      labelCache.set(templateId, sharp(svg).png().toBuffer())
+    }
+    return labelCache.get(templateId)
   }
+
+  const [photoLayers, labelInput] = await Promise.all([
+    Promise.all(
+      photos.slice(0, count).map(async (photo, i) => {
+        const buf     = base64ToBuffer(photo)
+        const resized = await sharp(buf)
+          .resize(cellW, cellH, { fit: 'cover', position: 'attention' })
+          .toBuffer()
+
+        const col = i % layout.cols
+        const row = Math.floor(i / layout.cols)
+
+        return {
+          input: resized,
+          left:  PADDING + col * (cellW + GAP),
+          top:   PADDING + row * (cellH + GAP),
+        }
+      })
+    ),
+    getLabelBuffer(),
+  ])
+
+  const labelLayer = { input: labelInput, left: 0, top: PRINT_H - LABEL_H }
 
   const allLayers = [...photoLayers, labelLayer]
 
