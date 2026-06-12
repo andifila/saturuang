@@ -52,16 +52,15 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     return () => { mounted = false }
   }, [phase])
 
-  // 5-detik jeda setelah kamera nyala sebelum foto pertama
+  // 5-detik jeda setelah kamera nyala → langsung foto (tanpa countdown lagi)
   useEffect(() => {
     if (phase !== 'prepare') return
     if (prepareCountdown > 0) {
       const t = setTimeout(() => setPrepareCountdown((c) => c - 1), 1000)
       return () => clearTimeout(t)
     }
-    setCountdown(COUNTDOWN_FROM)
-    setPhase('countdown')
-  }, [phase, prepareCountdown])
+    doCapture()
+  }, [phase, prepareCountdown, doCapture])
 
   const capturePhoto = useCallback(() => {
     const video  = videoRef.current
@@ -77,15 +76,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     return canvas.toDataURL('image/jpeg', 0.92)
   }, [])
 
-  // Countdown → capture
-  useEffect(() => {
-    if (phase !== 'countdown') return
-
-    if (countdown > 0) {
-      const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
-      return () => clearTimeout(t)
-    }
-
+  const doCapture = useCallback(() => {
     setFlash(true)
     const dataUrl = capturePhoto()
     const newPhotos = retakeIndex !== null
@@ -94,7 +85,6 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     setPhotos(newPhotos)
     setLastShot(dataUrl)
     setPhase('flash')
-
     setTimeout(() => {
       setFlash(false)
       if (retakeIndex !== null) {
@@ -111,7 +101,17 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
         }, BETWEEN_SHOT_DELAY)
       }
     }, FLASH_DURATION)
-  }, [phase, countdown, capturePhoto, photos, totalPhotos, retakeIndex])
+  }, [capturePhoto, photos, retakeIndex, totalPhotos])
+
+  // Countdown → capture (antar foto)
+  useEffect(() => {
+    if (phase !== 'countdown') return
+    if (countdown > 0) {
+      const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
+      return () => clearTimeout(t)
+    }
+    doCapture()
+  }, [phase, countdown, doCapture])
 
   const handleRetake = (index) => {
     setRetakeCount((c) => c + 1)
@@ -156,7 +156,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
         )}
       </AnimatePresence>
 
-      {/* Top bar — dots centered, counter top-right */}
+      {/* Top bar — dots centered */}
       <div className="absolute top-0 left-0 right-0 z-20 p-6 flex items-center justify-center">
         <div className="flex items-center gap-3">
           {Array.from({ length: totalPhotos }).map((_, i) => (
@@ -164,19 +164,33 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
               style={{ background: i < photos.length ? '#c9a96e' : 'rgba(255,255,255,0.25)' }}
               initial={{ width: 8, height: 8 }}
               animate={{
-                width:  i === photos.length && phase === 'countdown' ? 12 : 8,
-                height: i === photos.length && phase === 'countdown' ? 12 : 8,
-                scale:  i === photos.length && phase === 'countdown' ? [1, 1.3, 1] : 1,
+                width:  i === photos.length && (phase === 'countdown' || phase === 'prepare') ? 12 : 8,
+                height: i === photos.length && (phase === 'countdown' || phase === 'prepare') ? 12 : 8,
+                scale:  i === photos.length && (phase === 'countdown' || phase === 'prepare') ? [1, 1.3, 1] : 1,
               }}
               transition={{ repeat: i === photos.length ? Infinity : 0, duration: 1 }} />
           ))}
         </div>
-        <span className="absolute right-6 text-white/60 text-sm font-medium tracking-widest">
-          {retakeIndex !== null
-            ? `↺ FOTO ${retakeIndex + 1}`
-            : `${Math.min(photos.length + (phase === 'countdown' ? 1 : 0), totalPhotos)} / ${totalPhotos}`}
-        </span>
       </div>
+
+      {/* Counter — bottom center */}
+      <AnimatePresence>
+        {(phase === 'countdown' || phase === 'prepare' || phase === 'review') && (
+          <motion.div key="counter"
+            className="absolute bottom-8 left-0 right-0 z-20 flex justify-center pointer-events-none"
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+          >
+            <div className="px-5 py-2 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>
+              <span className="text-white/70 text-sm font-semibold tracking-widest">
+                {retakeIndex !== null
+                  ? `↺ FOTO ${retakeIndex + 1}`
+                  : `${Math.min(photos.length + (phase !== 'review' ? 1 : 0), totalPhotos)} / ${totalPhotos}`}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-[3px] z-20">

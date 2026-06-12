@@ -7,19 +7,16 @@ import CaptureScreen from './components/CaptureScreen'
 import PreviewScreen from './components/PreviewScreen'
 import './index.css'
 
-const SCREENS = ['start', 'config', 'payment', 'capture', 'preview']
 
 export default function App() {
   const [screen, setScreen] = useState('start')
-  const [totalPhotos, setTotalPhotos] = useState(4)
-  const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [totalPhotos,    setTotalPhotos]    = useState(4)
   const [capturedPhotos, setCapturedPhotos] = useState([])
 
   const goTo = (next) => setScreen(next)
 
-  const handleConfigDone = ({ photos, template }) => {
+  const handleConfigDone = ({ photos }) => {
     setTotalPhotos(photos)
-    setSelectedTemplate(template)
     goTo('payment')
   }
 
@@ -30,7 +27,6 @@ export default function App() {
 
   const handleRestart = () => {
     setTotalPhotos(4)
-    setSelectedTemplate(null)
     setCapturedPhotos([])
     goTo('start')
   }
@@ -55,7 +51,6 @@ export default function App() {
           <CaptureScreen
             key="capture"
             totalPhotos={totalPhotos}
-            template={selectedTemplate}
             onDone={handleCapturesDone}
           />
         )}
@@ -63,7 +58,6 @@ export default function App() {
           <PreviewScreen
             key="preview"
             photos={capturedPhotos}
-            template={selectedTemplate}
             onRestart={handleRestart}
           />
         )}
