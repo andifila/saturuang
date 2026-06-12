@@ -1,8 +1,10 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
+const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
+const midtransClient = require('midtrans-client')
 const { sendPhotoEmail } = require('./mailer')
 const { printPhoto } = require('./printer')
 const { compositePhoto } = require('./composer')
@@ -12,6 +14,15 @@ const PORT = process.env.PORT || 3001
 const OUTPUTS_DIR = path.resolve(__dirname, 'outputs')
 
 if (!fs.existsSync(OUTPUTS_DIR)) fs.mkdirSync(OUTPUTS_DIR, { recursive: true })
+
+// In-memory store: orderId -> { status: 'pending' | 'success' }
+const transactions = new Map()
+
+const midtrans = new midtransClient.CoreApi({
+  isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+  serverKey: process.env.MIDTRANS_SERVER_KEY,
+  clientKey: process.env.MIDTRANS_CLIENT_KEY,
+})
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
@@ -90,6 +101,81 @@ app.post('/api/print', asyncHandler(async (req, res) => {
   await printPhoto(filePath)
   res.json({ ok: true })
 }))
+
+const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
+
+// POST /api/generate-qris
+// Body  : { totalPhotos: number }
+// Return: { orderId: string, qrCodeUrl: string, price: number }
+app.post('/api/generate-qris', asyncHandler(async (req, res) => {
+  const totalPhotos = Number(req.body.totalPhotos)
+  const price = PRICE_TABLE[totalPhotos]
+  if (!price) {
+    return res.status(400).json({ error: 'Jumlah foto tidak valid' })
+  }
+
+  const orderId = `SR-${Date.now()}`
+
+  const chargeResponse = await midtrans.charge({
+    payment_type: 'gopay',
+    transaction_details: {
+      order_id: orderId,
+      gross_amount: price,
+    },
+    gopay: {
+      enable_callback: false,
+    },
+    item_details: [{
+      id: `PHOTO-${totalPhotos}`,
+      price,
+      quantity: 1,
+      name: `SatuRuang ${totalPhotos} Foto`,
+    }],
+  })
+
+  const qrAction = chargeResponse.actions?.find(a => a.name === 'generate-qr-code')
+  if (!qrAction?.url) {
+    return res.status(502).json({ error: 'Gagal mendapatkan URL QRIS dari Midtrans' })
+  }
+
+  transactions.set(orderId, { status: 'pending' })
+  res.json({ orderId, qrCodeUrl: qrAction.url, price })
+}))
+
+// POST /api/payment-webhook (dipanggil oleh server Midtrans)
+app.post('/api/payment-webhook', asyncHandler(async (req, res) => {
+  const { order_id, status_code, gross_amount, signature_key, transaction_status, fraud_status } = req.body
+
+  // Validasi signature Midtrans: SHA512(orderId + statusCode + grossAmount + serverKey)
+  const expected = crypto
+    .createHash('sha512')
+    .update(`${order_id}${status_code}${gross_amount}${process.env.MIDTRANS_SERVER_KEY}`)
+    .digest('hex')
+
+  if (expected !== signature_key) {
+    return res.status(403).json({ error: 'Signature tidak valid' })
+  }
+
+  const settled =
+    transaction_status === 'settlement' ||
+    (transaction_status === 'capture' && fraud_status === 'accept')
+
+  if (settled && transactions.has(order_id)) {
+    transactions.get(order_id).status = 'success'
+  }
+
+  res.json({ ok: true })
+}))
+
+// GET /api/check-status/:orderId (polling dari frontend)
+app.get('/api/check-status/:orderId', (req, res) => {
+  const { orderId } = req.params
+  if (!/^SR-\d+$/.test(orderId)) {
+    return res.status(400).json({ error: 'Order ID tidak valid' })
+  }
+  const tx = transactions.get(orderId)
+  res.json({ status: tx ? tx.status : 'not_found' })
+})
 
 // ---------------------------------------------------------------------------
 // Error handler

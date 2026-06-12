@@ -6,9 +6,9 @@ const fs = require('fs')
 const PRINT_W = 1200
 const PRINT_H = 1800
 
-// Outer margin and gap between cells (px)
-const PADDING = 48
-const GAP = 8
+const PADDING   = 48
+const GAP       = 8
+const LABEL_H   = 140 // reserved at bottom for template branding
 
 // Grid layout per photo count
 const LAYOUTS = {
@@ -17,6 +17,15 @@ const LAYOUTS = {
   8: { cols: 2, rows: 4 },
 }
 
+// Programmatic template definitions — used when no PNG overlay exists
+const TEMPLATE_STYLES = {
+  minimal: { bg: '#ffffff', labelBg: '#ebebeb', labelColor: '#aaaaaa', labelText: 'SatuRuang' },
+  gold:    { bg: '#0d0b08', labelBg: '#c9a96e', labelColor: '#0d0b08', labelText: 'SatuRuang' },
+  pink:    { bg: '#fff0f3', labelBg: '#e8a0a0', labelColor: '#ffffff', labelText: 'SatuRuang' },
+  film:    { bg: '#111009', labelBg: '#2a2218', labelColor: '#8a8060', labelText: 'SATU RUANG' },
+}
+const DEFAULT_STYLE = TEMPLATE_STYLES.minimal
+
 const TEMPLATES_DIR = path.join(__dirname, 'templates')
 
 function base64ToBuffer(dataUrl) {
@@ -24,22 +33,36 @@ function base64ToBuffer(dataUrl) {
   return Buffer.from(base64, 'base64')
 }
 
+function makeLabelSvg(width, height, text, bgColor, textColor) {
+  // Escape XML special characters
+  const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<rect width="${width}" height="${height}" fill="${bgColor}"/>` +
+    `<text x="${width / 2}" y="${height / 2 + 5}" ` +
+    `text-anchor="middle" dominant-baseline="middle" ` +
+    `font-family="Arial, Helvetica, sans-serif" font-size="26" ` +
+    `letter-spacing="6" fill="${textColor}" font-weight="600">${safe}</text>` +
+    `</svg>`
+  )
+}
+
 async function compositePhoto(photos, templateId, outputDir) {
-  const count = Math.min(photos.length, 8)
+  const count  = Math.min(photos.length, 8)
   const layout = LAYOUTS[count] || LAYOUTS[4]
+  const style  = TEMPLATE_STYLES[templateId] || DEFAULT_STYLE
 
-  // Available drawing area after outer padding
+  // Photo area: full height minus top/bottom padding and label strip
   const areaW = PRINT_W - PADDING * 2
-  const areaH = PRINT_H - PADDING * 2
+  const areaH = PRINT_H - PADDING - LABEL_H   // top padding only; label fills bottom
 
-  // Cell dimensions — equally divided with gaps between columns/rows
   const cellW = Math.floor((areaW - GAP * (layout.cols - 1)) / layout.cols)
   const cellH = Math.floor((areaH - GAP * (layout.rows - 1)) / layout.rows)
 
-  // Resize and place each photo into its cell
+  // Resize each photo into its cell
   const photoLayers = await Promise.all(
     photos.slice(0, count).map(async (photo, i) => {
-      const buf = base64ToBuffer(photo)
+      const buf     = base64ToBuffer(photo)
       const resized = await sharp(buf)
         .resize(cellW, cellH, { fit: 'cover', position: 'attention' })
         .toBuffer()
@@ -49,14 +72,23 @@ async function compositePhoto(photos, templateId, outputDir) {
 
       return {
         input: resized,
-        left: PADDING + col * (cellW + GAP),
-        top: PADDING + row * (cellH + GAP),
+        left:  PADDING + col * (cellW + GAP),
+        top:   PADDING + row * (cellH + GAP),
       }
     })
   )
 
-  // Optionally composite a transparent PNG frame on top
-  const allLayers = [...photoLayers]
+  // Bottom label strip (SVG rendered as image layer)
+  const labelSvg = makeLabelSvg(PRINT_W, LABEL_H, style.labelText, style.labelBg, style.labelColor)
+  const labelLayer = {
+    input: await sharp(labelSvg).png().toBuffer(),
+    left: 0,
+    top:  PRINT_H - LABEL_H,
+  }
+
+  const allLayers = [...photoLayers, labelLayer]
+
+  // Optional: PNG frame overlay from backend/templates/{templateId}.png
   if (templateId) {
     const templatePath = path.join(TEMPLATES_DIR, `${templateId}.png`)
     if (fs.existsSync(templatePath)) {
@@ -65,10 +97,10 @@ async function compositePhoto(photos, templateId, outputDir) {
   }
 
   const outputFilename = `photo_${Date.now()}.jpg`
-  const outputPath = path.join(outputDir, outputFilename)
+  const outputPath     = path.join(outputDir, outputFilename)
 
   await sharp({
-    create: { width: PRINT_W, height: PRINT_H, channels: 3, background: '#ffffff' },
+    create: { width: PRINT_W, height: PRINT_H, channels: 3, background: style.bg },
   })
     .composite(allLayers)
     .jpeg({ quality: 95 })
