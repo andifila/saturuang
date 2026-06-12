@@ -2,20 +2,23 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const COUNTDOWN_FROM = 3
-const FLASH_DURATION = 120 // ms
-const BETWEEN_SHOT_DELAY = 1200 // ms pause after each capture
+const FLASH_DURATION = 120
+const BETWEEN_SHOT_DELAY = 2500
+
+const GRID_LAYOUT = { 2: { cols: 1, rows: 2 }, 4: { cols: 2, rows: 2 }, 8: { cols: 2, rows: 4 } }
 
 export default function CaptureScreen({ totalPhotos, onDone }) {
-  const videoRef = useRef(null)
+  const videoRef  = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
 
-  const [phase, setPhase] = useState('init') // init | countdown | flash | review | done
-  const [countdown, setCountdown] = useState(COUNTDOWN_FROM)
-  const [shotIndex, setShotIndex] = useState(0)
-  const [photos, setPhotos] = useState([])
-  const [flash, setFlash] = useState(false)
-  const [lastShot, setLastShot] = useState(null)
+  const [phase,       setPhase]       = useState('init') // init|countdown|flash|review|finalReview|done
+  const [countdown,   setCountdown]   = useState(COUNTDOWN_FROM)
+  const [shotIndex,   setShotIndex]   = useState(0)
+  const [photos,      setPhotos]      = useState([])
+  const [flash,       setFlash]       = useState(false)
+  const [lastShot,    setLastShot]    = useState(null)
+  const [retakeIndex, setRetakeIndex] = useState(null) // slot being retaken (null = normal shot)
 
   // Start camera
   useEffect(() => {
@@ -25,15 +28,10 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
       .then((stream) => {
         if (!mounted) return
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-        // Small delay so camera warms up
+        if (videoRef.current) videoRef.current.srcObject = stream
         setTimeout(() => mounted && setPhase('countdown'), 800)
       })
-      .catch((err) => {
-        console.error('Camera error:', err)
-      })
+      .catch((err) => console.error('Camera error:', err))
 
     return () => {
       mounted = false
@@ -41,15 +39,13 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
     }
   }, [])
 
-  // Capture frame to canvas → dataURL
   const capturePhoto = useCallback(() => {
-    const video = videoRef.current
+    const video  = videoRef.current
     const canvas = canvasRef.current
     if (!video || !canvas) return null
-    canvas.width = video.videoWidth || 1280
+    canvas.width  = video.videoWidth  || 1280
     canvas.height = video.videoHeight || 720
     const ctx = canvas.getContext('2d')
-    // Mirror flip to match preview
     ctx.translate(canvas.width, 0)
     ctx.scale(-1, 1)
     ctx.drawImage(video, 0, 0)
@@ -57,7 +53,7 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
     return canvas.toDataURL('image/jpeg', 0.92)
   }, [])
 
-  // Countdown loop
+  // Countdown → capture
   useEffect(() => {
     if (phase !== 'countdown') return
 
@@ -66,19 +62,24 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
       return () => clearTimeout(t)
     }
 
-    // countdown hit 0 → fire flash + capture
     setFlash(true)
     const dataUrl = capturePhoto()
-    const newPhotos = [...photos, dataUrl]
+    const newPhotos = retakeIndex !== null
+      ? photos.map((p, i) => (i === retakeIndex ? dataUrl : p))
+      : [...photos, dataUrl]
     setPhotos(newPhotos)
     setLastShot(dataUrl)
     setPhase('flash')
 
     setTimeout(() => {
       setFlash(false)
-      if (newPhotos.length >= totalPhotos) {
-        setPhase('done')
-        setTimeout(() => onDone(newPhotos), 800)
+      if (retakeIndex !== null) {
+        // Selesai retake → kembali ke review
+        setRetakeIndex(null)
+        setPhase('finalReview')
+      } else if (newPhotos.length >= totalPhotos) {
+        // Semua foto selesai → tampilkan review
+        setPhase('finalReview')
       } else {
         setPhase('review')
         setTimeout(() => {
@@ -88,9 +89,21 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
         }, BETWEEN_SHOT_DELAY)
       }
     }, FLASH_DURATION)
-  }, [phase, countdown, capturePhoto, photos, totalPhotos, onDone])
+  }, [phase, countdown, capturePhoto, photos, totalPhotos, retakeIndex])
+
+  const handleRetake = (index) => {
+    setRetakeIndex(index)
+    setCountdown(COUNTDOWN_FROM)
+    setPhase('countdown')
+  }
+
+  const handleConfirm = () => {
+    setPhase('done')
+    setTimeout(() => onDone(photos), 800)
+  }
 
   const progressPercent = Math.round((photos.length / totalPhotos) * 100)
+  const layout = GRID_LAYOUT[totalPhotos] || GRID_LAYOUT[4]
 
   return (
     <motion.div
@@ -100,44 +113,32 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.4 }}
     >
-      {/* Live camera feed — mirrored */}
+      {/* Live camera feed */}
       <video
         ref={videoRef}
-        autoPlay
-        playsInline
-        muted
+        autoPlay playsInline muted
         className="absolute inset-0 w-full h-full object-cover"
         style={{ transform: 'scaleX(-1)' }}
       />
-
-      {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Dark vignette overlay */}
+      {/* Vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)',
-        }}
+        style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)' }}
       />
 
-      {/* Flash overlay */}
+      {/* Flash */}
       <AnimatePresence>
         {flash && (
-          <motion.div
-            key="flash"
-            className="absolute inset-0 bg-white z-50 pointer-events-none"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.06 }}
-          />
+          <motion.div key="flash" className="absolute inset-0 bg-white z-50 pointer-events-none"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.06 }} />
         )}
       </AnimatePresence>
 
-      {/* Top bar — shot counter + progress */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-6 flex items-center justify-between">
+      {/* Top bar — dots centered, counter top-right */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-6 flex items-center justify-center">
         <div className="flex items-center gap-3">
           {Array.from({ length: totalPhotos }).map((_, i) => (
             <motion.div
@@ -146,16 +147,18 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
               style={{ background: i < photos.length ? '#c9a96e' : 'rgba(255,255,255,0.25)' }}
               initial={{ width: 8, height: 8 }}
               animate={{
-                width: i === photos.length && phase === 'countdown' ? 12 : 8,
+                width:  i === photos.length && phase === 'countdown' ? 12 : 8,
                 height: i === photos.length && phase === 'countdown' ? 12 : 8,
-                scale: i === photos.length && phase === 'countdown' ? [1, 1.3, 1] : 1,
+                scale:  i === photos.length && phase === 'countdown' ? [1, 1.3, 1] : 1,
               }}
               transition={{ repeat: i === photos.length ? Infinity : 0, duration: 1 }}
             />
           ))}
         </div>
-        <span className="text-white/60 text-sm font-medium tracking-widest">
-          {photos.length + (phase === 'countdown' ? 1 : 0)} / {totalPhotos}
+        <span className="absolute right-6 text-white/60 text-sm font-medium tracking-widest">
+          {retakeIndex !== null
+            ? `↺ FOTO ${retakeIndex + 1}`
+            : `${photos.length + (phase === 'countdown' ? 1 : 0)} / ${totalPhotos}`}
         </span>
       </div>
 
@@ -175,65 +178,45 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
           <motion.div
             key={`cd-${countdown}-shot-${shotIndex}`}
             className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none"
-            initial={{ scale: 0.4, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 2.5, opacity: 0 }}
-            transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
+            initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 2.5, opacity: 0 }} transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
           >
-            <span
-              className="font-black leading-none select-none"
-              style={{
-                fontSize: 'clamp(140px, 22vw, 280px)',
-                color: 'white',
-                textShadow: '0 0 60px rgba(201,169,110,0.6), 0 8px 40px rgba(0,0,0,0.8)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
+            <span className="font-black leading-none select-none"
+              style={{ fontSize: 'clamp(140px, 22vw, 280px)', color: 'white',
+                       textShadow: '0 0 60px rgba(201,169,110,0.6), 0 8px 40px rgba(0,0,0,0.8)',
+                       fontVariantNumeric: 'tabular-nums' }}>
               {countdown}
             </span>
           </motion.div>
         )}
-
         {phase === 'countdown' && countdown === 0 && (
-          <motion.div
-            key="shoot"
+          <motion.div key="shoot"
             className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1.1, opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1.1, opacity: 1 }}
+            exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
           >
-            <span
-              className="font-black leading-none select-none tracking-tight"
-              style={{
-                fontSize: 'clamp(70px, 10vw, 120px)',
-                color: '#c9a96e',
-                textShadow: '0 0 40px rgba(201,169,110,0.9)',
-              }}
-            >
+            <span className="font-black leading-none select-none tracking-tight"
+              style={{ fontSize: 'clamp(70px, 10vw, 120px)', color: '#c9a96e',
+                       textShadow: '0 0 40px rgba(201,169,110,0.9)' }}>
               SMILE!
             </span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Between-shot mini preview thumbnail */}
+      {/* Between-shot mini preview */}
       <AnimatePresence>
         {phase === 'review' && lastShot && (
-          <motion.div
-            key="mini-preview"
+          <motion.div key="mini-preview"
             className="absolute bottom-8 right-8 z-30 rounded-xl overflow-hidden border-2 shadow-2xl"
             style={{ borderColor: '#c9a96e' }}
-            initial={{ opacity: 0, scale: 0.7, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.7, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 10 }}
             transition={{ type: 'spring', stiffness: 300, damping: 22 }}
           >
             <img src={lastShot} alt="last shot" className="w-40 h-24 object-cover" />
-            <div
-              className="absolute inset-0 flex items-end justify-center pb-2"
-              style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)' }}
-            >
+            <div className="absolute inset-0 flex items-end justify-center pb-2"
+              style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)' }}>
               <span className="text-white text-xs font-semibold tracking-widest">✓ TERSIMPAN</span>
             </div>
           </motion.div>
@@ -243,42 +226,87 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
       {/* Camera frame corners */}
       <div className="absolute inset-8 z-10 pointer-events-none">
         {['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((pos) => (
-          <div
-            key={pos}
-            className={`absolute w-10 h-10 ${
-              pos.includes('top') ? 'top-0' : 'bottom-0'
-            } ${pos.includes('left') ? 'left-0' : 'right-0'}`}
-            style={{
-              borderColor: 'rgba(201,169,110,0.7)',
-              borderStyle: 'solid',
-              borderWidth: 0,
-              ...(pos === 'top-left' && { borderTopWidth: 3, borderLeftWidth: 3 }),
-              ...(pos === 'top-right' && { borderTopWidth: 3, borderRightWidth: 3 }),
-              ...(pos === 'bottom-left' && { borderBottomWidth: 3, borderLeftWidth: 3 }),
+          <div key={pos}
+            className={`absolute w-10 h-10 ${pos.includes('top') ? 'top-0' : 'bottom-0'} ${pos.includes('left') ? 'left-0' : 'right-0'}`}
+            style={{ borderColor: 'rgba(201,169,110,0.7)', borderStyle: 'solid', borderWidth: 0,
+              ...(pos === 'top-left'     && { borderTopWidth: 3, borderLeftWidth: 3 }),
+              ...(pos === 'top-right'    && { borderTopWidth: 3, borderRightWidth: 3 }),
+              ...(pos === 'bottom-left'  && { borderBottomWidth: 3, borderLeftWidth: 3 }),
               ...(pos === 'bottom-right' && { borderBottomWidth: 3, borderRightWidth: 3 }),
-              borderRadius: 4,
-            }}
-          />
+              borderRadius: 4 }} />
         ))}
       </div>
 
-      {/* Init loading state */}
+      {/* Init loading */}
       <AnimatePresence>
         {phase === 'init' && (
-          <motion.div
-            key="init"
+          <motion.div key="init"
             className="absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/80 backdrop-blur-md gap-5"
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
+            exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
+            <motion.div className="w-12 h-12 rounded-full border-4 border-white/20 border-t-[#c9a96e]"
+              animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} />
+            <p className="text-white/60 text-sm tracking-widest font-medium">MENGAKTIFKAN KAMERA…</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Final Review ── */}
+      <AnimatePresence>
+        {phase === 'finalReview' && (
+          <motion.div key="final-review"
+            className="absolute inset-0 z-40 flex flex-col"
+            style={{ background: '#0d0d0f' }}
+            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
-            <motion.div
-              className="w-12 h-12 rounded-full border-4 border-white/20 border-t-[#c9a96e]"
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-            />
-            <p className="text-white/60 text-sm tracking-widest font-medium">
-              MENGAKTIFKAN KAMERA…
-            </p>
+            {/* Header */}
+            <div className="px-6 pt-6 pb-3 flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-white/40 text-[10px] tracking-[0.25em]">REVIEW FOTO</p>
+                <p className="text-white font-semibold text-lg">Tap ↺ untuk mengulang</p>
+              </div>
+              <span className="text-white/30 text-xs tracking-widest">{totalPhotos} FOTO</span>
+            </div>
+
+            {/* Photo grid */}
+            <div
+              className="flex-1 px-4 pb-3 min-h-0"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
+                gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
+                gap: 8,
+              }}
+            >
+              {photos.map((src, i) => (
+                <motion.div key={i} className="relative rounded-2xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
+                >
+                  <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
+                  <motion.button
+                    onClick={() => handleRetake(i)}
+                    whileTap={{ scale: 0.95 }}
+                    className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1.5 py-2.5"
+                    style={{ background: 'rgba(13,13,15,0.72)', backdropFilter: 'blur(6px)' }}
+                  >
+                    <span className="text-white/80 text-xs font-bold tracking-wider">↺ ULANGI</span>
+                  </motion.button>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Confirm */}
+            <div className="px-6 pb-6 pt-2 shrink-0">
+              <motion.button
+                onClick={handleConfirm}
+                whileTap={{ scale: 0.97 }}
+                className="w-full py-4 rounded-2xl font-bold tracking-widest text-sm"
+                style={{ background: 'linear-gradient(135deg, #c9a96e, #d4b87a)', color: '#0d0d0f' }}
+              >
+                Lanjut ke Preview →
+              </motion.button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -286,24 +314,16 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
       {/* Done transition overlay */}
       <AnimatePresence>
         {phase === 'done' && (
-          <motion.div
-            key="done-overlay"
+          <motion.div key="done-overlay"
             className="absolute inset-0 flex flex-col items-center justify-center z-40 gap-4"
             style={{ background: 'rgba(13,13,15,0.92)' }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 18, delay: 0.1 }}
-            >
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 18, delay: 0.1 }}>
               <span style={{ fontSize: 72 }}>🎉</span>
             </motion.div>
-            <p className="text-white text-2xl font-bold tracking-tight">
-              {totalPhotos} Foto Berhasil!
-            </p>
+            <p className="text-white text-2xl font-bold tracking-tight">{totalPhotos} Foto Berhasil!</p>
             <p className="text-white/50 text-sm tracking-widest">Memproses hasil foto…</p>
           </motion.div>
         )}
