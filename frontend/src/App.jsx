@@ -55,6 +55,7 @@ export default function App() {
           <CaptureScreen
             key="capture"
             totalPhotos={totalPhotos}
+            template={selectedTemplate}
             onDone={handleCapturesDone}
           />
         )}

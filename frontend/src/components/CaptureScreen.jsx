@@ -7,7 +7,14 @@ const BETWEEN_SHOT_DELAY = 2500
 
 const GRID_LAYOUT = { 2: { cols: 1, rows: 2 }, 4: { cols: 2, rows: 2 }, 8: { cols: 2, rows: 4 } }
 
-export default function CaptureScreen({ totalPhotos, onDone }) {
+const TEMPLATE_STYLES = {
+  minimal: { bg: '#ffffff', labelBg: '#ebebeb', labelColor: '#aaaaaa' },
+  gold:    { bg: '#0d0b08', labelBg: '#c9a96e', labelColor: '#0d0b08' },
+  pink:    { bg: '#fff0f3', labelBg: '#e8a0a0', labelColor: '#ffffff' },
+  film:    { bg: '#111009', labelBg: '#2a2218', labelColor: '#8a8060' },
+}
+
+export default function CaptureScreen({ totalPhotos, template, onDone }) {
   const videoRef  = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -103,7 +110,8 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
   }
 
   const progressPercent = Math.round((photos.length / totalPhotos) * 100)
-  const layout = GRID_LAYOUT[totalPhotos] || GRID_LAYOUT[4]
+  const layout    = GRID_LAYOUT[totalPhotos] || GRID_LAYOUT[4]
+  const tmplStyle = TEMPLATE_STYLES[template] || TEMPLATE_STYLES.minimal
 
   return (
     <motion.div
@@ -260,40 +268,59 @@ export default function CaptureScreen({ totalPhotos, onDone }) {
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
             {/* Header */}
-            <div className="px-6 pt-6 pb-3 flex items-center justify-between shrink-0">
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
               <div>
                 <p className="text-white/40 text-[10px] tracking-[0.25em]">REVIEW FOTO</p>
-                <p className="text-white font-semibold text-lg">Tap ↺ untuk mengulang</p>
+                <p className="text-white font-semibold">Tap ↺ untuk mengulang</p>
               </div>
               <span className="text-white/30 text-xs tracking-widest">{totalPhotos} FOTO</span>
             </div>
 
-            {/* Photo grid */}
-            <div
-              className="flex-1 px-4 pb-3 min-h-0"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
-                gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
-                gap: 8,
-              }}
-            >
-              {photos.map((src, i) => (
-                <motion.div key={i} className="relative rounded-2xl overflow-hidden"
-                  initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
+            {/* Photostrip card — styled per template */}
+            <div className="flex-1 flex items-center justify-center px-6 pb-3 min-h-0">
+              <motion.div
+                className="h-full rounded-2xl overflow-hidden flex flex-col shadow-2xl"
+                style={{ background: tmplStyle.bg, aspectRatio: '2/3', maxWidth: '100%' }}
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+              >
+                {/* Photo grid */}
+                <div
+                  className="flex-1 min-h-0 p-2.5"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
+                    gap: 5,
+                  }}
                 >
-                  <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
-                  <motion.button
-                    onClick={() => handleRetake(i)}
-                    whileTap={{ scale: 0.95 }}
-                    className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1.5 py-2.5"
-                    style={{ background: 'rgba(13,13,15,0.72)', backdropFilter: 'blur(6px)' }}
-                  >
-                    <span className="text-white/80 text-xs font-bold tracking-wider">↺ ULANGI</span>
-                  </motion.button>
-                </motion.div>
-              ))}
+                  {photos.map((src, i) => (
+                    <motion.div key={i} className="relative rounded-lg overflow-hidden"
+                      initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
+                    >
+                      <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
+                      <motion.button
+                        onClick={() => handleRetake(i)}
+                        whileTap={{ scale: 0.94 }}
+                        className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
+                        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+                      >
+                        <span className="text-white/90 text-[9px] font-bold tracking-wider">↺ ULANGI</span>
+                      </motion.button>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Label strip — matches actual print output */}
+                <div className="shrink-0 flex items-center justify-center"
+                  style={{ background: tmplStyle.labelBg, height: 32 }}>
+                  <span className="text-[9px] font-bold tracking-[0.35em]"
+                    style={{ color: tmplStyle.labelColor }}>
+                    SATU RUANG
+                  </span>
+                </div>
+              </motion.div>
             </div>
 
             {/* Confirm */}
