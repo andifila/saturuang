@@ -36,31 +36,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     return () => { streamRef.current?.getTracks().forEach((t) => t.stop()) }
   }, [])
 
-  // Mulai kamera saat masuk fase 'init'
-  useEffect(() => {
-    if (phase !== 'init') return
-    let mounted = true
-    navigator.mediaDevices
-      .getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' }, audio: false })
-      .then((stream) => {
-        if (!mounted) return
-        streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
-        setTimeout(() => { if (mounted) setPhase('prepare') }, 800)
-      })
-      .catch((err) => console.error('Camera error:', err))
-    return () => { mounted = false }
-  }, [phase])
-
-  // 5-detik jeda setelah kamera nyala → langsung foto (tanpa countdown lagi)
-  useEffect(() => {
-    if (phase !== 'prepare') return
-    if (prepareCountdown > 0) {
-      const t = setTimeout(() => setPrepareCountdown((c) => c - 1), 1000)
-      return () => clearTimeout(t)
-    }
-    doCapture()
-  }, [phase, prepareCountdown, doCapture])
+  // ── Callbacks dideklarasi SEBELUM effects yang memakainya (hindari TDZ) ──
 
   const capturePhoto = useCallback(() => {
     const video  = videoRef.current
@@ -102,6 +78,32 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
       }
     }, FLASH_DURATION)
   }, [capturePhoto, photos, retakeIndex, totalPhotos])
+
+  // Mulai kamera saat masuk fase 'init'
+  useEffect(() => {
+    if (phase !== 'init') return
+    let mounted = true
+    navigator.mediaDevices
+      .getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' }, audio: false })
+      .then((stream) => {
+        if (!mounted) return
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+        setTimeout(() => { if (mounted) setPhase('prepare') }, 800)
+      })
+      .catch((err) => console.error('Camera error:', err))
+    return () => { mounted = false }
+  }, [phase])
+
+  // 5-detik jeda setelah kamera nyala → langsung foto (tanpa countdown lagi)
+  useEffect(() => {
+    if (phase !== 'prepare') return
+    if (prepareCountdown > 0) {
+      const t = setTimeout(() => setPrepareCountdown((c) => c - 1), 1000)
+      return () => clearTimeout(t)
+    }
+    doCapture()
+  }, [phase, prepareCountdown, doCapture])
 
   // Countdown → capture (antar foto)
   useEffect(() => {
