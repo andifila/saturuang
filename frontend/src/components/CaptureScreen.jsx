@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const COUNTDOWN_FROM      = 10   // detik countdown per foto
+const PREPARE_FROM        = 5    // detik jeda setelah kamera nyala sebelum foto pertama
 const FLASH_DURATION      = 120  // ms
 const BETWEEN_SHOT_DELAY  = 2500 // ms thumbnail terlihat sebelum countdown berikutnya
 
@@ -26,8 +27,14 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   const [photos,       setPhotos]       = useState([])
   const [flash,        setFlash]        = useState(false)
   const [lastShot,     setLastShot]     = useState(null)
-  const [retakeIndex,  setRetakeIndex]  = useState(null)
-  const [retakenSlots, setRetakenSlots] = useState(new Set()) // slot yg sudah pernah diulang
+  const [retakeIndex,      setRetakeIndex]      = useState(null)
+  const [retakenSlots,     setRetakenSlots]     = useState(new Set())
+  const [prepareCountdown, setPrepareCountdown] = useState(PREPARE_FROM)
+
+  // Cleanup stream on unmount only
+  useEffect(() => {
+    return () => { streamRef.current?.getTracks().forEach((t) => t.stop()) }
+  }, [])
 
   // Mulai kamera saat masuk fase 'init'
   useEffect(() => {
@@ -39,15 +46,22 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
         if (!mounted) return
         streamRef.current = stream
         if (videoRef.current) videoRef.current.srcObject = stream
-        setTimeout(() => mounted && setPhase('countdown'), 800)
+        setTimeout(() => { if (mounted) setPhase('prepare') }, 800)
       })
       .catch((err) => console.error('Camera error:', err))
-
-    return () => {
-      mounted = false
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-    }
+    return () => { mounted = false }
   }, [phase])
+
+  // 5-detik jeda setelah kamera nyala sebelum foto pertama
+  useEffect(() => {
+    if (phase !== 'prepare') return
+    if (prepareCountdown > 0) {
+      const t = setTimeout(() => setPrepareCountdown((c) => c - 1), 1000)
+      return () => clearTimeout(t)
+    }
+    setCountdown(COUNTDOWN_FROM)
+    setPhase('countdown')
+  }, [phase, prepareCountdown])
 
   const capturePhoto = useCallback(() => {
     const video  = videoRef.current
@@ -171,6 +185,33 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
           animate={{ width: `${progressPercent}%` }}
           transition={{ duration: 0.5, ease: 'easeOut' }} />
       </div>
+
+      {/* Prepare overlay — 5 detik setelah kamera nyala */}
+      <AnimatePresence>
+        {phase === 'prepare' && (
+          <motion.div key="prepare-overlay"
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <p className="text-white/50 text-xs tracking-[0.3em] mb-3">FOTO PERTAMA DALAM</p>
+            <AnimatePresence mode="wait">
+              <motion.span key={prepareCountdown}
+                className="font-black leading-none tabular-nums"
+                style={{ fontSize: 'clamp(120px, 18vw, 220px)', color: '#c9a96e',
+                         textShadow: '0 0 50px rgba(201,169,110,0.5)' }}
+                initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.8, opacity: 0 }}
+                transition={{ duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }}
+              >
+                {prepareCountdown}
+              </motion.span>
+            </AnimatePresence>
+            <p className="text-white/30 text-sm mt-4">Bersiaplah di depan kamera</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Countdown number */}
       <AnimatePresence mode="wait">
