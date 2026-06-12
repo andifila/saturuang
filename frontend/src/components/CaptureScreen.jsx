@@ -28,7 +28,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   const [flash,        setFlash]        = useState(false)
   const [lastShot,     setLastShot]     = useState(null)
   const [retakeIndex,      setRetakeIndex]      = useState(null)
-  const [retakenSlots,     setRetakenSlots]     = useState(new Set())
+  const [retakeCount,      setRetakeCount]      = useState(0) // total pengulangan terpakai
   const [prepareCountdown, setPrepareCountdown] = useState(PREPARE_FROM)
 
   // Cleanup stream on unmount only
@@ -114,7 +114,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   }, [phase, countdown, capturePhoto, photos, totalPhotos, retakeIndex])
 
   const handleRetake = (index) => {
-    setRetakenSlots(prev => new Set([...prev, index]))
+    setRetakeCount((c) => c + 1)
     setRetakeIndex(index)
     setCountdown(COUNTDOWN_FROM)
     setPhase('countdown')
@@ -174,7 +174,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
         <span className="absolute right-6 text-white/60 text-sm font-medium tracking-widest">
           {retakeIndex !== null
             ? `↺ FOTO ${retakeIndex + 1}`
-            : `${photos.length + (phase === 'countdown' ? 1 : 0)} / ${totalPhotos}`}
+            : `${Math.min(photos.length + (phase === 'countdown' ? 1 : 0), totalPhotos)} / ${totalPhotos}`}
         </span>
       </div>
 
@@ -344,17 +344,46 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
             initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
-              <div>
-                <p className="text-white/40 text-[10px] tracking-[0.25em]">REVIEW FOTO</p>
-                <p className="text-white font-semibold">
-                  {retakenSlots.size < totalPhotos ? 'Tap ↺ untuk mengulang' : 'Semua kesempatan digunakan'}
+            {/* Header */}
+            <div className="px-6 pt-5 pb-3 shrink-0">
+              <p className="text-white/40 text-[10px] tracking-[0.25em] mb-1">REVIEW FOTO</p>
+              <p className="text-white font-semibold text-base">
+                {retakeCount < totalPhotos ? 'Ada foto yang kurang oke? Tap untuk mengulang!' : 'Semua kesempatan sudah digunakan'}
+              </p>
+            </div>
+
+            {/* Retake quota banner */}
+            <motion.div
+              className="mx-6 mb-3 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0"
+              style={{ background: retakeCount < totalPhotos ? 'rgba(201,169,110,0.12)' : 'rgba(255,255,255,0.05)',
+                       border: `1px solid ${retakeCount < totalPhotos ? 'rgba(201,169,110,0.3)' : 'rgba(255,255,255,0.08)'}` }}
+              initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+            >
+              <span style={{ fontSize: 20 }}>{retakeCount < totalPhotos ? '↺' : '🔒'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-semibold leading-tight">
+                  {retakeCount < totalPhotos
+                    ? `${totalPhotos - retakeCount} kesempatan mengulang tersisa`
+                    : 'Kuota pengulangan habis'}
+                </p>
+                <p className="text-white/40 text-[11px] mt-0.5">
+                  {retakeCount < totalPhotos
+                    ? 'Tekan ↺ di foto mana pun untuk mengambil ulang'
+                    : 'Tap "Lanjut" untuk lanjut ke preview'}
                 </p>
               </div>
-              <span className="text-white/30 text-xs">
-                ↺ {totalPhotos - retakenSlots.size} tersisa
-              </span>
-            </div>
+              {/* Dot indicators */}
+              <div className="flex gap-1.5 shrink-0">
+                {Array.from({ length: totalPhotos }).map((_, i) => (
+                  <motion.div key={i}
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ background: i < (totalPhotos - retakeCount) ? '#c9a96e' : 'rgba(255,255,255,0.15)' }}
+                    initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    transition={{ delay: 0.2 + i * 0.06, type: 'spring', stiffness: 400 }}
+                  />
+                ))}
+              </div>
+            </motion.div>
 
             {/* Photostrip card styled per template */}
             <div className="flex-1 flex items-center justify-center px-6 pb-3 min-h-0">
@@ -372,30 +401,27 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
                     gap: 5,
                   }}
                 >
-                  {photos.map((src, i) => {
-                    const alreadyRetaken = retakenSlots.has(i)
-                    return (
-                      <motion.div key={i} className="relative rounded-lg overflow-hidden"
-                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
-                      >
-                        <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
-                        {alreadyRetaken ? (
-                          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
-                            style={{ background: 'rgba(0,0,0,0.45)' }}>
-                            <span className="text-white/40 text-[9px] font-bold tracking-wider">✓ DIULANG</span>
-                          </div>
-                        ) : (
-                          <motion.button onClick={() => handleRetake(i)} whileTap={{ scale: 0.94 }}
-                            className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
-                            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
-                          >
-                            <span className="text-white/90 text-[9px] font-bold tracking-wider">↺ ULANGI</span>
-                          </motion.button>
-                        )}
-                      </motion.div>
-                    )
-                  })}
+                  {photos.map((src, i) => (
+                    <motion.div key={i} className="relative rounded-lg overflow-hidden"
+                      initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
+                    >
+                      <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
+                      {retakeCount < totalPhotos ? (
+                        <motion.button onClick={() => handleRetake(i)} whileTap={{ scale: 0.94 }}
+                          className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
+                          style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+                        >
+                          <span className="text-white/90 text-[9px] font-bold tracking-wider">↺ ULANGI</span>
+                        </motion.button>
+                      ) : (
+                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
+                          style={{ background: 'rgba(0,0,0,0.35)' }}>
+                          <span className="text-white/25 text-[9px] font-bold tracking-wider">🔒</span>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
                 </div>
 
                 <div className="shrink-0 flex items-center justify-center"
