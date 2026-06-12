@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment — NEVER commit real credentials
+backend/.env
+# .env.example boleh masuk (berisi placeholder saja)
+
+# Generated photo outputs — tidak perlu di-track
+backend/outputs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code settings (local only)
+.claude/
