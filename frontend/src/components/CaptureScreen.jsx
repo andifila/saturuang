@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const COUNTDOWN_FROM = 3
-const FLASH_DURATION = 120
-const BETWEEN_SHOT_DELAY = 2500
+const COUNTDOWN_FROM      = 10   // detik countdown per foto
+const FLASH_DURATION      = 120  // ms
+const BETWEEN_SHOT_DELAY  = 2500 // ms thumbnail terlihat sebelum countdown berikutnya
 
 const GRID_LAYOUT = { 2: { cols: 1, rows: 2 }, 4: { cols: 2, rows: 2 }, 8: { cols: 2, rows: 4 } }
 
@@ -19,16 +19,19 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
 
-  const [phase,       setPhase]       = useState('init') // init|countdown|flash|review|finalReview|done
-  const [countdown,   setCountdown]   = useState(COUNTDOWN_FROM)
-  const [shotIndex,   setShotIndex]   = useState(0)
-  const [photos,      setPhotos]      = useState([])
-  const [flash,       setFlash]       = useState(false)
-  const [lastShot,    setLastShot]    = useState(null)
-  const [retakeIndex, setRetakeIndex] = useState(null) // slot being retaken (null = normal shot)
+  // 'ready' → user tap mulai → 'init' → camera warm up → 'countdown' → 'flash' → 'review' → ... → 'finalReview' → 'done'
+  const [phase,        setPhase]        = useState('ready')
+  const [countdown,    setCountdown]    = useState(COUNTDOWN_FROM)
+  const [shotIndex,    setShotIndex]    = useState(0)
+  const [photos,       setPhotos]       = useState([])
+  const [flash,        setFlash]        = useState(false)
+  const [lastShot,     setLastShot]     = useState(null)
+  const [retakeIndex,  setRetakeIndex]  = useState(null)
+  const [retakenSlots, setRetakenSlots] = useState(new Set()) // slot yg sudah pernah diulang
 
-  // Start camera
+  // Mulai kamera saat masuk fase 'init'
   useEffect(() => {
+    if (phase !== 'init') return
     let mounted = true
     navigator.mediaDevices
       .getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' }, audio: false })
@@ -44,7 +47,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
       mounted = false
       streamRef.current?.getTracks().forEach((t) => t.stop())
     }
-  }, [])
+  }, [phase])
 
   const capturePhoto = useCallback(() => {
     const video  = videoRef.current
@@ -81,11 +84,9 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     setTimeout(() => {
       setFlash(false)
       if (retakeIndex !== null) {
-        // Selesai retake → kembali ke review
         setRetakeIndex(null)
         setPhase('finalReview')
       } else if (newPhotos.length >= totalPhotos) {
-        // Semua foto selesai → tampilkan review
         setPhase('finalReview')
       } else {
         setPhase('review')
@@ -99,6 +100,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   }, [phase, countdown, capturePhoto, photos, totalPhotos, retakeIndex])
 
   const handleRetake = (index) => {
+    setRetakenSlots(prev => new Set([...prev, index]))
     setRetakeIndex(index)
     setCountdown(COUNTDOWN_FROM)
     setPhase('countdown')
@@ -122,19 +124,14 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
       transition={{ duration: 0.4 }}
     >
       {/* Live camera feed */}
-      <video
-        ref={videoRef}
-        autoPlay playsInline muted
+      <video ref={videoRef} autoPlay playsInline muted
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ transform: 'scaleX(-1)' }}
-      />
+        style={{ transform: 'scaleX(-1)' }} />
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Vignette */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)' }}
-      />
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)' }} />
 
       {/* Flash */}
       <AnimatePresence>
@@ -149,9 +146,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
       <div className="absolute top-0 left-0 right-0 z-20 p-6 flex items-center justify-center">
         <div className="flex items-center gap-3">
           {Array.from({ length: totalPhotos }).map((_, i) => (
-            <motion.div
-              key={i}
-              className="rounded-full"
+            <motion.div key={i} className="rounded-full"
               style={{ background: i < photos.length ? '#c9a96e' : 'rgba(255,255,255,0.25)' }}
               initial={{ width: 8, height: 8 }}
               animate={{
@@ -159,8 +154,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
                 height: i === photos.length && phase === 'countdown' ? 12 : 8,
                 scale:  i === photos.length && phase === 'countdown' ? [1, 1.3, 1] : 1,
               }}
-              transition={{ repeat: i === photos.length ? Infinity : 0, duration: 1 }}
-            />
+              transition={{ repeat: i === photos.length ? Infinity : 0, duration: 1 }} />
           ))}
         </div>
         <span className="absolute right-6 text-white/60 text-sm font-medium tracking-widest">
@@ -172,19 +166,16 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
 
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-[3px] z-20">
-        <motion.div
-          className="h-full"
+        <motion.div className="h-full"
           style={{ background: 'linear-gradient(to right, #c9a96e, #f0d9a8)' }}
           animate={{ width: `${progressPercent}%` }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        />
+          transition={{ duration: 0.5, ease: 'easeOut' }} />
       </div>
 
       {/* Countdown number */}
       <AnimatePresence mode="wait">
         {phase === 'countdown' && countdown > 0 && (
-          <motion.div
-            key={`cd-${countdown}-shot-${shotIndex}`}
+          <motion.div key={`cd-${countdown}-shot-${shotIndex}`}
             className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none"
             initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 2.5, opacity: 0 }} transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
@@ -245,6 +236,51 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
         ))}
       </div>
 
+      {/* ── Ready screen — user tap sebelum kamera mulai ── */}
+      <AnimatePresence>
+        {phase === 'ready' && (
+          <motion.div key="ready-screen"
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-10"
+            style={{ background: '#0d0d0f' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.35 }}
+          >
+            {/* Icon kamera */}
+            <motion.div
+              className="w-24 h-24 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(201,169,110,0.1)', border: '2px solid rgba(201,169,110,0.3)' }}
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
+            >
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9a96e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </motion.div>
+
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-white/40 text-xs tracking-[0.3em]">SESI FOTO DIMULAI</p>
+              <p className="text-white text-3xl font-bold">{totalPhotos} Foto</p>
+              <p className="text-white/40 text-sm text-center max-w-xs leading-relaxed mt-1">
+                Bersiaplah di depan kamera, lalu tekan tombol di bawah
+              </p>
+            </div>
+
+            <motion.button
+              onClick={() => setPhase('init')}
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.02 }}
+              className="px-16 py-5 rounded-2xl font-bold tracking-widest text-base"
+              style={{ background: 'linear-gradient(135deg, #c9a96e, #d4b87a)', color: '#0d0d0f' }}
+              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              Mulai Sesi Foto →
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Init loading */}
       <AnimatePresence>
         {phase === 'init' && (
@@ -267,16 +303,19 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
             initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
-            {/* Header */}
             <div className="px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
               <div>
                 <p className="text-white/40 text-[10px] tracking-[0.25em]">REVIEW FOTO</p>
-                <p className="text-white font-semibold">Tap ↺ untuk mengulang</p>
+                <p className="text-white font-semibold">
+                  {retakenSlots.size < totalPhotos ? 'Tap ↺ untuk mengulang' : 'Semua kesempatan digunakan'}
+                </p>
               </div>
-              <span className="text-white/30 text-xs tracking-widest">{totalPhotos} FOTO</span>
+              <span className="text-white/30 text-xs">
+                ↺ {totalPhotos - retakenSlots.size} tersisa
+              </span>
             </div>
 
-            {/* Photostrip card — styled per template */}
+            {/* Photostrip card styled per template */}
             <div className="flex-1 flex items-center justify-center px-6 pb-3 min-h-0">
               <motion.div
                 className="h-full rounded-2xl overflow-hidden flex flex-col shadow-2xl"
@@ -284,9 +323,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
                 initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 260, damping: 24 }}
               >
-                {/* Photo grid */}
-                <div
-                  className="flex-1 min-h-0 p-2.5"
+                <div className="flex-1 min-h-0 p-2.5"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
@@ -294,43 +331,45 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
                     gap: 5,
                   }}
                 >
-                  {photos.map((src, i) => (
-                    <motion.div key={i} className="relative rounded-lg overflow-hidden"
-                      initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
-                    >
-                      <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
-                      <motion.button
-                        onClick={() => handleRetake(i)}
-                        whileTap={{ scale: 0.94 }}
-                        className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
-                        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+                  {photos.map((src, i) => {
+                    const alreadyRetaken = retakenSlots.has(i)
+                    return (
+                      <motion.div key={i} className="relative rounded-lg overflow-hidden"
+                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 22 }}
                       >
-                        <span className="text-white/90 text-[9px] font-bold tracking-wider">↺ ULANGI</span>
-                      </motion.button>
-                    </motion.div>
-                  ))}
+                        <img src={src} alt={`foto ${i + 1}`} className="w-full h-full object-cover" />
+                        {alreadyRetaken ? (
+                          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
+                            style={{ background: 'rgba(0,0,0,0.45)' }}>
+                            <span className="text-white/40 text-[9px] font-bold tracking-wider">✓ DIULANG</span>
+                          </div>
+                        ) : (
+                          <motion.button onClick={() => handleRetake(i)} whileTap={{ scale: 0.94 }}
+                            className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5"
+                            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+                          >
+                            <span className="text-white/90 text-[9px] font-bold tracking-wider">↺ ULANGI</span>
+                          </motion.button>
+                        )}
+                      </motion.div>
+                    )
+                  })}
                 </div>
 
-                {/* Label strip — matches actual print output */}
                 <div className="shrink-0 flex items-center justify-center"
                   style={{ background: tmplStyle.labelBg, height: 32 }}>
-                  <span className="text-[9px] font-bold tracking-[0.35em]"
-                    style={{ color: tmplStyle.labelColor }}>
+                  <span className="text-[9px] font-bold tracking-[0.35em]" style={{ color: tmplStyle.labelColor }}>
                     SATU RUANG
                   </span>
                 </div>
               </motion.div>
             </div>
 
-            {/* Confirm */}
             <div className="px-6 pb-6 pt-2 shrink-0">
-              <motion.button
-                onClick={handleConfirm}
-                whileTap={{ scale: 0.97 }}
+              <motion.button onClick={handleConfirm} whileTap={{ scale: 0.97 }}
                 className="w-full py-4 rounded-2xl font-bold tracking-widest text-sm"
-                style={{ background: 'linear-gradient(135deg, #c9a96e, #d4b87a)', color: '#0d0d0f' }}
-              >
+                style={{ background: 'linear-gradient(135deg, #c9a96e, #d4b87a)', color: '#0d0d0f' }}>
                 Lanjut ke Preview →
               </motion.button>
             </div>
