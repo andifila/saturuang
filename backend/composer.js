@@ -71,7 +71,7 @@ async function compositePhoto(photos, templateId, outputDir) {
     create: { width: PRINT_W, height: PRINT_H, channels: 3, background: '#ffffff' },
   })
     .composite(allLayers)
-    .jpeg({ quality: 95, mozjpeg: true })
+    .jpeg({ quality: 95 })
     .toFile(outputPath)
 
   return outputPath
