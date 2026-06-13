@@ -32,7 +32,32 @@ const midtrans = new midtransClient.CoreApi({
 
 const PRICE_TABLE   = { 2: 20000, 4: 30000 }
 const TTL_MS        = 30 * 60 * 1000
-const DASHBOARD_PIN = process.env.DASHBOARD_PIN || '1234'
+
+// Require a strong DASHBOARD_PIN — refuse to start without it
+const DASHBOARD_PIN = process.env.DASHBOARD_PIN
+if (!DASHBOARD_PIN || DASHBOARD_PIN.length < 6) {
+  console.error('[FATAL] DASHBOARD_PIN belum diset atau terlalu pendek (minimal 6 karakter).')
+  console.error('[FATAL] Tambahkan DASHBOARD_PIN=<pin-kuat-anda> ke file .env dan restart server.')
+  process.exit(1)
+}
+
+// In-memory rate limiter untuk /api/dashboard/auth
+// 5 percobaan gagal → kunci 15 menit per IP
+const AUTH_MAX_ATTEMPTS = 5
+const AUTH_LOCKOUT_MS   = 15 * 60 * 1000
+const authAttempts      = new Map() // ip → { count, resetAt }
+
+function checkAuthRateLimit(ip) {
+  const now   = Date.now()
+  const entry = authAttempts.get(ip)
+  if (entry && entry.resetAt > now && entry.count >= AUTH_MAX_ATTEMPTS) return false
+  if (!entry || entry.resetAt <= now) {
+    authAttempts.set(ip, { count: 1, resetAt: now + AUTH_LOCKOUT_MS })
+  } else {
+    entry.count++
+  }
+  return true
+}
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
@@ -177,13 +202,24 @@ app.get('/api/check-status/:orderId', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.post('/api/dashboard/auth', (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown'
+
+  if (!checkAuthRateLimit(ip)) {
+    return res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi dalam 15 menit.' })
+  }
+
   const { pin } = req.body
-  if (typeof pin !== 'string' || pin.length !== DASHBOARD_PIN.length) {
+  const valid = typeof pin === 'string'
+    && pin.length === DASHBOARD_PIN.length
+    && crypto.timingSafeEqual(Buffer.from(pin), Buffer.from(DASHBOARD_PIN))
+
+  if (!valid) {
+    console.warn(`[dashboard/auth] Percobaan PIN gagal dari ${ip}`)
     return res.status(401).json({ error: 'PIN salah' })
   }
-  // Constant-time comparison — cegah timing attack
-  const match = crypto.timingSafeEqual(Buffer.from(pin), Buffer.from(DASHBOARD_PIN))
-  if (!match) return res.status(401).json({ error: 'PIN salah' })
+
+  // Reset rate limit on successful login
+  authAttempts.delete(ip)
 
   const token = crypto.randomBytes(32).toString('hex')
   dashboardSessions.set(token, Date.now() + 8 * 60 * 60 * 1000) // 8 jam
