@@ -21,7 +21,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
   const streamRef = useRef(null)
 
   // 'ready' → user tap mulai → 'init' → camera warm up → 'countdown' → 'flash' → 'review' → ... → 'finalReview' → 'done'
-  const [phase,        setPhase]        = useState('ready')
+  const [phase,        setPhase]        = useState('init')
   const [countdown,    setCountdown]    = useState(COUNTDOWN_FROM)
   const [shotIndex,    setShotIndex]    = useState(0)
   const [photos,       setPhotos]       = useState([])
