@@ -107,8 +107,9 @@ async function compositePhoto(photos, templateId, outputDir, orderId) {
     layers.push({ input: resizedPhotos[i], left: xRight, top: y })
   }
 
-  // 4b. Template PNG transparan — dua kali untuk dual strip
-  const templatePath = path.join(TEMPLATES_DIR, spec.template)
+  // 4b. Template PNG transparan — gunakan pilihan user, fallback ke default per jenis strip
+  const templateFile = templateId ? `${templateId}.png` : spec.template
+  const templatePath = path.join(TEMPLATES_DIR, templateFile)
   if (fs.existsSync(templatePath)) {
     layers.push({ input: templatePath, left: 0,       top: 0 })
     layers.push({ input: templatePath, left: STRIP_W, top: 0 })

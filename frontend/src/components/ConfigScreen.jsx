@@ -7,7 +7,7 @@ const PHOTO_OPTIONS = [
 ]
 
 export default function ConfigScreen({ onDone }) {
-  const [photos, setPhotos] = useState(4)
+  const [photos, setPhotos] = useState(null)
 
   const containerVariants = {
     hidden: {},
@@ -89,19 +89,22 @@ export default function ConfigScreen({ onDone }) {
 
       {/* Next button */}
       <motion.button
-        onClick={() => onDone({ photos })}
-        whileTap={{ scale: 0.96 }}
-        whileHover={{ scale: 1.02 }}
+        onClick={() => photos && onDone({ photos })}
+        whileTap={photos ? { scale: 0.96 } : {}}
+        whileHover={photos ? { scale: 1.02 } : {}}
         className="w-full max-w-xs lg:max-w-sm px-8 py-4 lg:py-6 rounded-2xl font-bold tracking-widest uppercase text-sm lg:text-base"
         style={{
-          background: 'linear-gradient(135deg, #c9a96e 0%, #d4b87a 100%)',
-          color: '#0d0d0f',
+          background: photos
+            ? 'linear-gradient(135deg, #c9a96e 0%, #d4b87a 100%)'
+            : 'rgba(201,169,110,0.15)',
+          color:   photos ? '#0d0d0f' : 'rgba(201,169,110,0.4)',
+          cursor:  photos ? 'pointer' : 'default',
         }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        Lanjut ke Pembayaran →
+        {photos ? 'Lanjut ke Pembayaran →' : 'Pilih paket dahulu'}
       </motion.button>
     </motion.div>
   )

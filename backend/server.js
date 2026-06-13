@@ -24,12 +24,14 @@ const midtrans = new midtransClient.CoreApi({
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
 })
 
-const PRICE_TABLE = { 2: 20000, 4: 30000 }
-const TTL_MS      = 30 * 60 * 1000 // auto-purge transaksi setelah 30 menit
+const PRICE_TABLE   = { 2: 20000, 4: 30000 }
+const TTL_MS        = 30 * 60 * 1000 // auto-purge transaksi setelah 30 menit
+const TEMPLATES_DIR = path.resolve(__dirname, 'templates')
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
-app.use('/outputs', express.static(OUTPUTS_DIR))
+app.use('/outputs',   express.static(OUTPUTS_DIR))
+app.use('/templates', express.static(TEMPLATES_DIR))
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -171,6 +173,17 @@ app.post('/api/payment-webhook', asyncHandler(async (req, res) => {
 
 // GET /api/health
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
+// GET /api/templates — list PNG files in backend/templates/
+app.get('/api/templates', (_req, res) => {
+  if (!fs.existsSync(TEMPLATES_DIR)) return res.json([])
+  const files = fs.readdirSync(TEMPLATES_DIR).filter(f => /\.png$/i.test(f))
+  res.json(files.map(f => ({
+    id:   f.replace(/\.png$/i, ''),
+    name: f.replace(/\.png$/i, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    url:  `/templates/${f}`,
+  })))
+})
 
 // GET /api/check-status/:orderId (polling dari frontend)
 app.get('/api/check-status/:orderId', (req, res) => {

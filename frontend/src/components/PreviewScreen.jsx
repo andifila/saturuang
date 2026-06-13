@@ -1,13 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const TEMPLATES = [
-  { id: 'minimal', label: 'Minimal', bg: '#ffffff', labelBg: '#ebebeb', labelColor: '#aaa',    photoSlot: '#cccccc' },
-  { id: 'gold',    label: 'Gold',    bg: '#0d0b08', labelBg: '#c9a96e', labelColor: '#0d0b08', photoSlot: '#2a2418' },
-  { id: 'pink',    label: 'Blush',   bg: '#fff0f3', labelBg: '#e8a0a0', labelColor: '#fff',    photoSlot: '#ddc8cc' },
-  { id: 'film',    label: 'Film',    bg: '#111009', labelBg: '#2a2218', labelColor: '#8a8060', photoSlot: '#1e1a10' },
-]
-
 const FILTERS = [
   { id: 'original', label: 'Original', css: 'none' },
   { id: 'bw',       label: 'B&W',      css: 'grayscale(1) contrast(1.05)' },
@@ -29,33 +22,18 @@ const ROWS_NUM = [
   ['ABC','[SPACE]','.com','✓'],
 ]
 
-// ─── StripPreview ─────────────────────────────────────────────────────────────
+// ─── TemplateThumbnail ────────────────────────────────────────────────────────
 
-function StripPreview({ tmpl, photoCount, selected }) {
-  const cols = photoCount === 2 ? 1 : 2
-  const rows = photoCount === 8 ? 4 : 2
+function TemplateThumbnail({ url, selected }) {
   return (
-    <div className="flex flex-col rounded-xl overflow-hidden"
-      style={{
-        width: 52, height: 78, background: tmpl.bg,
-        boxShadow: selected
-          ? '0 0 0 2px #c9a96e, 0 4px 16px rgba(201,169,110,0.35)'
-          : '0 2px 6px rgba(0,0,0,0.4)',
-        transition: 'box-shadow 0.15s',
-      }}>
-      <div className="flex-1 p-[4px]"
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                 gridTemplateRows: `repeat(${rows}, 1fr)`, gap: 2 }}>
-        {Array.from({ length: photoCount }).map((_, i) => (
-          <div key={i} className="rounded-[2px]" style={{ background: tmpl.photoSlot }} />
-        ))}
-      </div>
-      <div className="shrink-0 flex items-center justify-center"
-        style={{ height: 10, background: tmpl.labelBg }}>
-        <span style={{ fontSize: 3.5, letterSpacing: 0.8, color: tmpl.labelColor, fontWeight: 700 }}>
-          SATU RUANG
-        </span>
-      </div>
+    <div style={{
+      width: 52, height: 78, borderRadius: 8, overflow: 'hidden',
+      boxShadow: selected
+        ? '0 0 0 2px #c9a96e, 0 4px 16px rgba(201,169,110,0.35)'
+        : '0 2px 8px rgba(0,0,0,0.5)',
+      transition: 'box-shadow 0.15s',
+    }}>
+      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
     </div>
   )
 }
@@ -182,7 +160,9 @@ function ActionButton({ state, onClick, disabled, className, style, loadingLabel
 // ─── PreviewScreen ────────────────────────────────────────────────────────────
 
 export default function PreviewScreen({ photos, orderId, onRestart }) {
-  const [selectedTemplate, setSelectedTemplate] = useState('gold')
+  const [templates,        setTemplates]        = useState([])
+  const [templatesReady,   setTemplatesReady]   = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [filter,           setFilter]           = useState('original')
   const [compositePhase,   setCompositePhase]   = useState('loading')
   const [compositeUrl,     setCompositeUrl]      = useState(null)
@@ -204,7 +184,7 @@ export default function PreviewScreen({ photos, orderId, onRestart }) {
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  // Health check saat mount — tentukan status koneksi backend secara akurat
+  // Health check + fetch templates list — keduanya jalan paralel saat mount
   useEffect(() => {
     let cancelled = false
     fetch('/api/health')
@@ -214,9 +194,23 @@ export default function PreviewScreen({ photos, orderId, onRestart }) {
     return () => { cancelled = true }
   }, [])
 
-  // Re-process saat template berubah atau backend baru online
   useEffect(() => {
-    if (backendStatus !== 'online') {
+    let cancelled = false
+    fetch('/api/templates')
+      .then(r => r.json())
+      .then(list => {
+        if (cancelled) return
+        setTemplates(list)
+        if (list.length > 0) setSelectedTemplate(list[0].id)
+        setTemplatesReady(true)
+      })
+      .catch(() => { if (!cancelled) setTemplatesReady(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Re-process saat template berubah atau backend baru online (tunggu templates ready)
+  useEffect(() => {
+    if (backendStatus !== 'online' || !templatesReady) {
       if (backendStatus === 'offline') setCompositePhase('offline')
       return
     }
@@ -241,7 +235,7 @@ export default function PreviewScreen({ photos, orderId, onRestart }) {
       .catch(() => { if (!cancelled) setCompositePhase('offline') })
 
     return () => { cancelled = true }
-  }, [selectedTemplate, backendStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTemplate, backendStatus, templatesReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrint = async () => {
     if (!filename || printState !== 'idle') return
@@ -350,23 +344,25 @@ export default function PreviewScreen({ photos, orderId, onRestart }) {
             </div>
           )}
 
-          {/* Bingkai — centered */}
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-xs tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>PILIH BINGKAI</p>
-            <div className="flex gap-5 justify-center flex-wrap">
-              {TEMPLATES.map((t) => (
-                <motion.button key={t.id} onClick={() => setSelectedTemplate(t.id)}
-                  whileTap={{ scale: 0.93 }} whileHover={{ scale: 1.05 }}
-                  className="flex flex-col items-center gap-2">
-                  <StripPreview tmpl={t} photoCount={photos.length} selected={selectedTemplate === t.id} />
-                  <span className="text-xs font-semibold"
-                    style={{ color: selectedTemplate === t.id ? '#c9a96e' : 'rgba(255,255,255,0.4)' }}>
-                    {t.label}
-                  </span>
-                </motion.button>
-              ))}
+          {/* Bingkai — tampilkan thumbnail PNG dari folder templates */}
+          {templates.length > 0 && (
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-xs tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.35)' }}>PILIH BINGKAI</p>
+              <div className="flex gap-5 justify-center flex-wrap">
+                {templates.map((t) => (
+                  <motion.button key={t.id} onClick={() => setSelectedTemplate(t.id)}
+                    whileTap={{ scale: 0.93 }} whileHover={{ scale: 1.05 }}
+                    className="flex flex-col items-center gap-2">
+                    <TemplateThumbnail url={t.url} selected={selectedTemplate === t.id} />
+                    <span className="text-xs font-semibold"
+                      style={{ color: selectedTemplate === t.id ? '#c9a96e' : 'rgba(255,255,255,0.4)' }}>
+                      {t.name}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Filter — centered */}
           <div className="flex flex-col items-center gap-3">
