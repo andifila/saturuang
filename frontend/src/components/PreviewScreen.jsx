@@ -135,6 +135,40 @@ function VirtualKeyboard({ value, onChange, onClose, compact }) {
   )
 }
 
+// ─── ActionButton ─────────────────────────────────────────────────────────────
+
+function ActionButton({ state, onClick, disabled, className, style, loadingLabel, doneLabel, errorLabel, children }) {
+  return (
+    <motion.button
+      onClick={!disabled && state === 'idle' ? onClick : undefined}
+      whileTap={!disabled && state === 'idle' ? { scale: 0.97 } : {}}
+      className={`font-bold tracking-widest flex items-center justify-center gap-2 ${className}`}
+      style={{
+        ...style,
+        ...(state === 'done'  && { background: 'rgba(74,222,128,0.12)',  color: '#4ade80', border: '1px solid #4ade80'  }),
+        ...(state === 'error' && { background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid #f87171' }),
+        opacity: disabled && state === 'idle' ? 0.45 : 1,
+        cursor: disabled || state !== 'idle' ? 'default' : 'pointer',
+      }}
+    >
+      <AnimatePresence mode="wait">
+        <motion.span key={state} className="flex items-center gap-2"
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}>
+          {state === 'loading' && (
+            <motion.span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent inline-block"
+              animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} />
+          )}
+          {state === 'idle' && children}
+          {state === 'loading' && loadingLabel}
+          {state === 'done'    && doneLabel}
+          {state === 'error'   && errorLabel}
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
+  )
+}
+
 // ─── PreviewScreen ────────────────────────────────────────────────────────────
 
 export default function PreviewScreen({ photos, onRestart }) {
@@ -148,6 +182,7 @@ export default function PreviewScreen({ photos, onRestart }) {
   const [emailState,       setEmailState]        = useState('idle')
   const [printState,       setPrintState]        = useState('idle')
   const [isMobile,         setIsMobile]          = useState(() => window.innerWidth < 768)
+  const [backendStatus,    setBackendStatus]      = useState('checking') // checking | online | offline
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 768)
@@ -155,8 +190,22 @@ export default function PreviewScreen({ photos, onRestart }) {
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  // Re-process when template changes
+  // Health check saat mount — tentukan status koneksi backend secara akurat
   useEffect(() => {
+    let cancelled = false
+    fetch('/api/health')
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(() => { if (!cancelled) setBackendStatus('online') })
+      .catch(() => { if (!cancelled) setBackendStatus('offline') })
+    return () => { cancelled = true }
+  }, [])
+
+  // Re-process saat template berubah atau backend baru online
+  useEffect(() => {
+    if (backendStatus !== 'online') {
+      if (backendStatus === 'offline') setCompositePhase('offline')
+      return
+    }
     let cancelled = false
     setCompositePhase('loading')
     setCompositeUrl(null)
@@ -178,7 +227,7 @@ export default function PreviewScreen({ photos, onRestart }) {
       .catch(() => { if (!cancelled) setCompositePhase('offline') })
 
     return () => { cancelled = true }
-  }, [selectedTemplate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTemplate, backendStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrint = async () => {
     if (!filename || printState !== 'idle') return
@@ -326,38 +375,21 @@ export default function PreviewScreen({ photos, onRestart }) {
           <div className="h-px shrink-0" style={{ background: '#1e1e24' }} />
 
           {/* Cetak */}
-          <motion.button onClick={handlePrint}
-            whileTap={backendReady && printState === 'idle' ? { scale: 0.97 } : {}}
-            className="w-full py-5 rounded-2xl font-bold tracking-widest text-sm flex items-center justify-center gap-3"
+          <ActionButton
+            state={printState}
+            onClick={handlePrint}
+            disabled={!filename}
+            className="w-full py-5 rounded-2xl text-sm"
             style={{
-              background: printState === 'done'  ? 'rgba(74,222,128,0.12)'
-                : printState === 'error' ? 'rgba(248,113,113,0.12)'
-                : backendReady ? 'linear-gradient(135deg,#c9a96e,#d4b87a)'
-                : 'rgba(201,169,110,0.15)',
-              color: printState === 'done'  ? '#4ade80'
-                : printState === 'error' ? '#f87171'
-                : backendReady ? '#0d0d0f' : '#c9a96e',
-              border: printState === 'done'  ? '1px solid #4ade80'
-                : printState === 'error' ? '1px solid #f87171' : 'none',
-              opacity: !backendReady && printState === 'idle' ? 0.5 : 1,
-              cursor: !backendReady || printState !== 'idle' ? 'not-allowed' : 'pointer',
-            }}>
-            <AnimatePresence mode="wait">
-              <motion.span key={printState} className="flex items-center gap-2"
-                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}>
-                {printState === 'loading' && (
-                  <motion.span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent inline-block"
-                    animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} />
-                )}
-                {printState === 'idle' && '🖨  '}
-                {printState === 'idle' ? 'CETAK FOTO'
-                  : printState === 'loading' ? 'MENCETAK…'
-                  : printState === 'done' ? '✓ DIKIRIM KE PRINTER'
-                  : '↺ COBA LAGI'}
-              </motion.span>
-            </AnimatePresence>
-          </motion.button>
+              background: filename ? 'linear-gradient(135deg,#c9a96e,#d4b87a)' : 'rgba(201,169,110,0.15)',
+              color: filename ? '#0d0d0f' : '#c9a96e',
+            }}
+            loadingLabel="MENCETAK…"
+            doneLabel="✓ DIKIRIM KE PRINTER"
+            errorLabel="↺ COBA LAGI"
+          >
+            🖨  CETAK FOTO
+          </ActionButton>
 
           {printState === 'done' && (
             <motion.p className="text-xs text-center -mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}
@@ -380,39 +412,25 @@ export default function PreviewScreen({ photos, onRestart }) {
               }}>
               {email || 'Ketuk untuk memasukkan email…'}
             </motion.button>
-            <motion.button onClick={handleSendEmail}
-              whileTap={email && backendReady && emailState === 'idle' ? { scale: 0.97 } : {}}
-              className="w-full py-3.5 rounded-xl font-bold tracking-widest text-xs"
+            <ActionButton
+              state={emailState}
+              onClick={handleSendEmail}
+              disabled={!email || !filename}
+              className="w-full py-3.5 rounded-xl text-xs"
               style={{
-                background: emailState === 'done'  ? 'rgba(74,222,128,0.08)'
-                  : emailState === 'error' ? 'rgba(248,113,113,0.08)'
-                  : 'rgba(201,169,110,0.1)',
-                color: emailState === 'done'  ? '#4ade80'
-                  : emailState === 'error' ? '#f87171' : '#c9a96e',
-                border: emailState === 'done'  ? '1px solid #4ade80'
-                  : emailState === 'error' ? '1px solid #f87171'
-                  : '1px solid rgba(201,169,110,0.3)',
-                opacity: (!email || !backendReady) && emailState === 'idle' ? 0.4 : 1,
-                cursor: (!email || !backendReady) && emailState === 'idle' ? 'not-allowed' : 'pointer',
-              }}>
-              <AnimatePresence mode="wait">
-                <motion.span key={emailState} className="flex items-center justify-center gap-2"
-                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.12 }}>
-                  {emailState === 'loading' && (
-                    <motion.span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent inline-block"
-                      animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} />
-                  )}
-                  {emailState === 'idle' ? 'KIRIM EMAIL'
-                    : emailState === 'loading' ? 'MENGIRIM…'
-                    : emailState === 'done' ? '✓ EMAIL TERKIRIM'
-                    : '↺ COBA LAGI'}
-                </motion.span>
-              </AnimatePresence>
-            </motion.button>
+                background: 'rgba(201,169,110,0.1)',
+                color: '#c9a96e',
+                border: '1px solid rgba(201,169,110,0.3)',
+              }}
+              loadingLabel="MENGIRIM…"
+              doneLabel="✓ EMAIL TERKIRIM"
+              errorLabel="↺ COBA LAGI"
+            >
+              KIRIM EMAIL
+            </ActionButton>
           </div>
 
-          {compositePhase === 'offline' && (
+          {backendStatus === 'offline' && (
             <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.2)' }}>
               Backend offline — preview saja.<br />
               Jalankan <code className="text-[#c9a96e]">node server.js</code> untuk cetak & email.

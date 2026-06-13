@@ -25,6 +25,7 @@ const midtrans = new midtransClient.CoreApi({
 })
 
 const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
+const TTL_MS      = 30 * 60 * 1000 // auto-purge transaksi setelah 30 menit
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
@@ -139,6 +140,7 @@ app.post('/api/generate-qris', asyncHandler(async (req, res) => {
   }
 
   transactions.set(orderId, { status: 'pending' })
+  setTimeout(() => transactions.delete(orderId), TTL_MS)
   res.json({ orderId, qrCodeUrl: qrAction.url, price })
 }))
 
@@ -166,6 +168,9 @@ app.post('/api/payment-webhook', asyncHandler(async (req, res) => {
 
   res.json({ ok: true })
 }))
+
+// GET /api/health
+app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // GET /api/check-status/:orderId (polling dari frontend)
 app.get('/api/check-status/:orderId', (req, res) => {
