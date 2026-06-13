@@ -140,12 +140,6 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
     return () => clearInterval(id)
   }, [phase])
 
-  // ── 4. Pindah ke CaptureScreen setelah animasi sukses ─────────────────────
-  useEffect(() => {
-    if (phase !== 'success') return
-    const t = setTimeout(() => onSuccess(orderId), 1800)
-    return () => clearTimeout(t)
-  }, [phase, onSuccess])
 
   const displayPrice = formatRupiah(price)
   const qrSize       = 'min(256px, 62vw)'
@@ -236,7 +230,16 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
               </svg>
             </motion.div>
             <p className="text-white text-2xl font-bold">Pembayaran Berhasil!</p>
-            <p className="text-white/40 text-sm">Bersiaplah untuk berfoto…</p>
+            <p className="text-white/40 text-sm">Siap untuk berfoto?</p>
+            <motion.button
+              onClick={() => onSuccess(orderId)}
+              whileTap={{ scale: 0.96 }} whileHover={{ scale: 1.03 }}
+              className="mt-2 px-10 py-4 rounded-2xl font-bold tracking-widest text-sm"
+              style={{ background: 'linear-gradient(135deg,#c9a96e,#d4b87a)', color: '#0d0d0f' }}
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}>
+              Mulai Foto →
+            </motion.button>
           </motion.div>
         )}
 
