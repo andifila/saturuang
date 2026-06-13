@@ -32,7 +32,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative w-screen h-screen bg-[#0d0d0f] overflow-hidden">
+    <div className="relative w-full h-full bg-[#0d0d0f] overflow-hidden">
       <AnimatePresence mode="wait">
         {screen === 'start' && (
           <StartScreen key="start" onStart={() => goTo('config')} />

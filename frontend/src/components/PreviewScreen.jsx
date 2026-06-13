@@ -62,20 +62,24 @@ function StripPreview({ tmpl, photoCount, selected }) {
 
 // ─── VirtualKeyboard ──────────────────────────────────────────────────────────
 
-function Key({ label, onPress }) {
-  const isWide   = ['123','ABC','.com','⌫'].includes(label)
-  const isAccent = label === '✓'
+function Key({ label, onPress, compact }) {
+  const isWide    = ['123','ABC','.com','⌫'].includes(label)
+  const isAccent  = label === '✓'
   const isSpecial = ['⌫','123','ABC','.com','✓','[SPACE]'].includes(label)
-  const display  = label === '[SPACE]' ? 'SPACE' : label === '✓' ? 'SELESAI' : label
+  const display   = label === '[SPACE]' ? 'SPACE' : label === '✓' ? 'SELESAI' : label
   return (
     <motion.button
       onPointerDown={(e) => { e.preventDefault(); onPress(label) }}
       whileTap={{ scale: 0.85, opacity: 0.7 }}
       className="flex items-center justify-center rounded-xl font-semibold select-none"
       style={{
-        height: 46, minWidth: label === '[SPACE]' ? 200 : isWide ? 76 : 52,
-        flexGrow: label === '[SPACE]' ? 1 : 0,
-        fontSize: isSpecial ? 10 : 15, letterSpacing: isSpecial ? '0.1em' : 0,
+        height: compact ? 36 : 46,
+        ...(compact
+          ? { flex: label === '[SPACE]' ? '4 1 0' : isWide ? '1.5 1 0' : '1 1 0', minWidth: 0 }
+          : { minWidth: label === '[SPACE]' ? 200 : isWide ? 76 : 52, flexGrow: label === '[SPACE]' ? 1 : 0 }
+        ),
+        fontSize: compact ? (isSpecial ? 8 : 12) : (isSpecial ? 10 : 15),
+        letterSpacing: isSpecial ? '0.1em' : 0,
         background: isAccent ? 'linear-gradient(135deg,#c9a96e,#d4b87a)'
           : label === '⌫' ? 'rgba(255,255,255,0.07)'
           : isSpecial ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.07)',
@@ -88,7 +92,7 @@ function Key({ label, onPress }) {
   )
 }
 
-function VirtualKeyboard({ value, onChange, onClose }) {
+function VirtualKeyboard({ value, onChange, onClose, compact }) {
   const [mode, setMode] = useState('alpha')
   const rows = mode === 'alpha' ? ROWS_ALPHA : ROWS_NUM
   const handleKey = useCallback((key) => {
@@ -102,7 +106,7 @@ function VirtualKeyboard({ value, onChange, onClose }) {
   }, [value, onChange, onClose])
   return (
     <motion.div
-      className="fixed bottom-0 left-0 right-0 z-50 flex flex-col gap-1.5 px-4 pb-4 pt-3"
+      className={`fixed bottom-0 left-0 right-0 z-50 flex flex-col ${compact ? 'gap-1 px-2 pb-2 pt-2' : 'gap-1.5 px-4 pb-4 pt-3'}`}
       style={{ background: 'rgba(16,16,20,0.98)', backdropFilter: 'blur(24px)', borderTop: '1px solid #2e2e36' }}
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={{ type: 'spring', stiffness: 400, damping: 38 }}
@@ -123,8 +127,8 @@ function VirtualKeyboard({ value, onChange, onClose }) {
         )}
       </div>
       {rows.map((row, ri) => (
-        <div key={ri} className="flex justify-center gap-1.5">
-          {row.map((key) => <Key key={key} label={key} onPress={handleKey} />)}
+        <div key={ri} className={`flex justify-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
+          {row.map((key) => <Key key={key} label={key} onPress={handleKey} compact={compact} />)}
         </div>
       ))}
     </motion.div>
@@ -143,6 +147,13 @@ export default function PreviewScreen({ photos, onRestart }) {
   const [showKeyboard,     setShowKeyboard]      = useState(false)
   const [emailState,       setEmailState]        = useState('idle')
   const [printState,       setPrintState]        = useState('idle')
+  const [isMobile,         setIsMobile]          = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   // Re-process when template changes
   useEffect(() => {
@@ -201,15 +212,21 @@ export default function PreviewScreen({ photos, onRestart }) {
 
   return (
     <>
-      <motion.div className="w-screen h-screen flex overflow-hidden" style={{ background: '#0d0d0f' }}
+      <motion.div className="w-full h-full flex overflow-hidden" style={{ background: '#0d0d0f', flexDirection: isMobile ? 'column' : 'row' }}
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.35 }}>
 
-        {/* ── Kiri: Portrait photo strip ─────────────────────────────────── */}
-        <div className="h-full flex items-center justify-center shrink-0 p-6"
-          style={{ width: '38%', borderRight: '1px solid #1e1e24' }}>
+        {/* ── Strip panel (left on desktop, top on mobile) ───────────────── */}
+        <div className="flex items-center justify-center shrink-0"
+          style={{
+            width: isMobile ? '100%' : '38%',
+            height: isMobile ? '38%' : '100%',
+            padding: isMobile ? '12px 16px 8px' : '24px',
+            borderRight: isMobile ? 'none' : '1px solid #1e1e24',
+            borderBottom: isMobile ? '1px solid #1e1e24' : 'none',
+          }}>
           <div className="relative rounded-2xl overflow-hidden shadow-2xl"
-            style={{ aspectRatio: '2/3', height: '100%', maxHeight: '100%', background: '#111114' }}>
+            style={{ aspectRatio: '2/3', height: '100%', maxHeight: '100%', maxWidth: '100%', background: '#111114' }}>
 
             {/* Raw grid — langsung tampil */}
             <div className="absolute inset-0"
@@ -260,13 +277,15 @@ export default function PreviewScreen({ photos, onRestart }) {
           </div>
         </div>
 
-        {/* ── Kanan: Controls ────────────────────────────────────────────── */}
-        <div className="flex-1 h-full flex flex-col overflow-y-auto px-8 py-6 gap-6">
+        {/* ── Controls panel (right on desktop, bottom on mobile) ─────────── */}
+        <div className={`flex-1 min-h-0 flex flex-col overflow-y-auto ${isMobile ? 'px-4 py-4 gap-4' : 'h-full px-8 py-6 gap-6'}`}>
 
-          <div>
-            <p className="text-xs tracking-[0.25em]" style={{ color: 'rgba(255,255,255,0.3)' }}>HASIL FOTO</p>
-            <p className="text-white font-semibold text-lg mt-0.5">Sesuaikan tampilan</p>
-          </div>
+          {!isMobile && (
+            <div>
+              <p className="text-xs tracking-[0.25em]" style={{ color: 'rgba(255,255,255,0.3)' }}>HASIL FOTO</p>
+              <p className="text-white font-semibold text-lg mt-0.5">Sesuaikan tampilan</p>
+            </div>
+          )}
 
           {/* Bingkai — centered */}
           <div className="flex flex-col items-center gap-3">
@@ -416,7 +435,7 @@ export default function PreviewScreen({ photos, onRestart }) {
             <motion.div key="backdrop" className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowKeyboard(false)} />
-            <VirtualKeyboard key="kbd" value={email} onChange={setEmail} onClose={() => setShowKeyboard(false)} />
+            <VirtualKeyboard key="kbd" value={email} onChange={setEmail} onClose={() => setShowKeyboard(false)} compact={isMobile} />
           </>
         )}
       </AnimatePresence>
