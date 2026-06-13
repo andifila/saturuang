@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import StartScreen from './components/StartScreen'
-import ConfigScreen from './components/ConfigScreen'
-import PaymentScreen from './components/PaymentScreen'
-import CaptureScreen from './components/CaptureScreen'
-import PreviewScreen from './components/PreviewScreen'
+import StartScreen    from './components/StartScreen'
+import ConfigScreen   from './components/ConfigScreen'
+import PaymentScreen  from './components/PaymentScreen'
+import CaptureScreen  from './components/CaptureScreen'
+import PreviewScreen  from './components/PreviewScreen'
+import DeliveryScreen from './components/DeliveryScreen'
 import './index.css'
 
 
@@ -13,6 +14,7 @@ export default function App() {
   const [totalPhotos,    setTotalPhotos]    = useState(4)
   const [capturedPhotos, setCapturedPhotos] = useState([])
   const [orderId,        setOrderId]        = useState(null)
+  const [composite,      setComposite]      = useState(null) // { compositeUrl, filename, filterCss }
 
   const goTo = (next) => setScreen(next)
 
@@ -31,10 +33,16 @@ export default function App() {
     goTo('preview')
   }
 
+  const handlePreviewDone = (result) => {
+    setComposite(result)
+    goTo('delivery')
+  }
+
   const handleRestart = () => {
     setTotalPhotos(4)
     setCapturedPhotos([])
     setOrderId(null)
+    setComposite(null)
     goTo('start')
   }
 
@@ -66,6 +74,17 @@ export default function App() {
             key="preview"
             photos={capturedPhotos}
             orderId={orderId}
+            onDone={handlePreviewDone}
+            onRestart={handleRestart}
+          />
+        )}
+        {screen === 'delivery' && (
+          <DeliveryScreen
+            key="delivery"
+            compositeUrl={composite?.compositeUrl}
+            filename={composite?.filename}
+            filterCss={composite?.filterCss || 'none'}
+            onBack={() => goTo('preview')}
             onRestart={handleRestart}
           />
         )}
