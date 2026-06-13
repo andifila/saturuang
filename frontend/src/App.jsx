@@ -12,12 +12,18 @@ export default function App() {
   const [screen, setScreen] = useState('start')
   const [totalPhotos,    setTotalPhotos]    = useState(4)
   const [capturedPhotos, setCapturedPhotos] = useState([])
+  const [orderId,        setOrderId]        = useState(null)
 
   const goTo = (next) => setScreen(next)
 
   const handleConfigDone = ({ photos }) => {
     setTotalPhotos(photos)
     goTo('payment')
+  }
+
+  const handlePaymentSuccess = (oid) => {
+    setOrderId(oid)
+    goTo('capture')
   }
 
   const handleCapturesDone = (photos) => {
@@ -28,6 +34,7 @@ export default function App() {
   const handleRestart = () => {
     setTotalPhotos(4)
     setCapturedPhotos([])
+    setOrderId(null)
     goTo('start')
   }
 
@@ -44,7 +51,7 @@ export default function App() {
           <PaymentScreen
             key="payment"
             totalPhotos={totalPhotos}
-            onSuccess={() => goTo('capture')}
+            onSuccess={handlePaymentSuccess}
           />
         )}
         {screen === 'capture' && (
@@ -58,6 +65,7 @@ export default function App() {
           <PreviewScreen
             key="preview"
             photos={capturedPhotos}
+            orderId={orderId}
             onRestart={handleRestart}
           />
         )}

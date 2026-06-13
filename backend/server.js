@@ -72,11 +72,11 @@ function asyncHandler(fn) {
 // Body  : { photos: string[] (base64 dataURLs), template: string | null }
 // Return: { url: string, filename: string }
 app.post('/api/process-image', asyncHandler(async (req, res) => {
-  const { photos, template } = req.body
+  const { photos, template, orderId } = req.body
   if (!Array.isArray(photos) || photos.length === 0) {
     return res.status(400).json({ error: 'Array photos wajib diisi' })
   }
-  const outputPath = await compositePhoto(photos, template || null, OUTPUTS_DIR)
+  const outputPath = await compositePhoto(photos, template || null, OUTPUTS_DIR, orderId || null)
   const filename = path.basename(outputPath)
   res.json({ url: `/outputs/${filename}`, filename })
 }))

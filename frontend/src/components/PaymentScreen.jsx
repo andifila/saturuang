@@ -143,7 +143,7 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
   // ── 4. Pindah ke CaptureScreen setelah animasi sukses ─────────────────────
   useEffect(() => {
     if (phase !== 'success') return
-    const t = setTimeout(onSuccess, 1800)
+    const t = setTimeout(() => onSuccess(orderId), 1800)
     return () => clearTimeout(t)
   }, [phase, onSuccess])
 

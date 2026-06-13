@@ -181,7 +181,7 @@ function ActionButton({ state, onClick, disabled, className, style, loadingLabel
 
 // ─── PreviewScreen ────────────────────────────────────────────────────────────
 
-export default function PreviewScreen({ photos, onRestart }) {
+export default function PreviewScreen({ photos, orderId, onRestart }) {
   const [selectedTemplate, setSelectedTemplate] = useState('gold')
   const [filter,           setFilter]           = useState('original')
   const [compositePhase,   setCompositePhase]   = useState('loading')
@@ -230,7 +230,7 @@ export default function PreviewScreen({ photos, onRestart }) {
     fetch('/api/process-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photos, template: selectedTemplate }),
+      body: JSON.stringify({ photos, template: selectedTemplate, orderId }),
     })
       .then((r) => { if (!r.ok) throw new Error(r.statusText); return r.json() })
       .then((data) => {
