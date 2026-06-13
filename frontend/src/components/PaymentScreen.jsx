@@ -44,7 +44,7 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
 
   return (
     <motion.div
-      className="w-screen h-screen flex flex-col items-center justify-center"
+      className="w-full h-full flex flex-col items-center justify-center"
       style={{ background: '#0d0d0f' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -88,7 +88,7 @@ export default function PaymentScreen({ totalPhotos, onSuccess }) {
             {/* QR placeholder */}
             <motion.div
               className="p-5 rounded-3xl shadow-2xl relative overflow-hidden"
-              style={{ background: 'white', width: 256, height: 256 }}
+              style={{ background: 'white', width: 'min(256px, 62vw)', height: 'min(256px, 62vw)' }}
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 260, damping: 20 }}

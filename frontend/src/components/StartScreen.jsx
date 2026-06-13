@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 export default function StartScreen({ onStart }) {
   return (
     <motion.div
-      className="relative w-screen h-screen flex flex-col items-center justify-center overflow-hidden"
+      className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden"
       style={{ background: '#0d0d0f' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -14,8 +14,8 @@ export default function StartScreen({ onStart }) {
       <div
         className="absolute pointer-events-none"
         style={{
-          width: 600,
-          height: 600,
+          width: 'min(600px, 90vw)',
+          height: 'min(600px, 90vw)',
           borderRadius: '50%',
           background: 'radial-gradient(circle, rgba(201,169,110,0.12) 0%, transparent 70%)',
           top: '50%',
@@ -68,7 +68,7 @@ export default function StartScreen({ onStart }) {
         {/* CTA button with pulse */}
         <motion.button
           onClick={onStart}
-          className="mt-6 px-14 py-5 rounded-2xl font-bold tracking-widest uppercase text-sm relative overflow-hidden"
+          className="mt-6 px-10 sm:px-14 py-4 sm:py-5 rounded-2xl font-bold tracking-widest uppercase text-sm relative overflow-hidden"
           style={{
             background: 'linear-gradient(135deg, #c9a96e 0%, #d4b87a 100%)',
             color: '#0d0d0f',

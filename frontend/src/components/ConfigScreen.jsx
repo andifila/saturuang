@@ -22,7 +22,7 @@ export default function ConfigScreen({ onDone }) {
 
   return (
     <motion.div
-      className="w-screen h-screen flex flex-col items-center justify-center px-8 gap-10 overflow-hidden"
+      className="w-full h-full flex flex-col items-center justify-center px-6 sm:px-8 gap-8 sm:gap-10 overflow-hidden"
       style={{ background: '#0d0d0f' }}
       initial={{ opacity: 0, x: 60 }}
       animate={{ opacity: 1, x: 0 }}
@@ -93,7 +93,7 @@ export default function ConfigScreen({ onDone }) {
         onClick={() => onDone({ photos })}
         whileTap={{ scale: 0.96 }}
         whileHover={{ scale: 1.02 }}
-        className="px-16 py-4 rounded-2xl font-bold tracking-widest uppercase text-sm"
+        className="w-full max-w-xs px-8 py-4 rounded-2xl font-bold tracking-widest uppercase text-sm"
         style={{
           background: 'linear-gradient(135deg, #c9a96e 0%, #d4b87a 100%)',
           color: '#0d0d0f',

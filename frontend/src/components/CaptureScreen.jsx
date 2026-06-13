@@ -133,7 +133,7 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
 
   return (
     <motion.div
-      className="relative w-screen h-screen flex items-center justify-center bg-black overflow-hidden"
+      className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
