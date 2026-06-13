@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { API_BASE } from '../../DashboardApp'
 
 const formatRp    = n  => `Rp ${Number(n).toLocaleString('id-ID')}`
 const formatMB    = b  => `${Math.round(b / 1024 / 1024)} MB`
@@ -89,7 +90,7 @@ export default function DashboardScreen({ token, onLogout }) {
 
   const fetchStats = async () => {
     try {
-      const r = await fetch('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
+      const r = await fetch(`${API_BASE}/api/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
       if (r.status === 401) { onLogout(); return }
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setStats(await r.json())

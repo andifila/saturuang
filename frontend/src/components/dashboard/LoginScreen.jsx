@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { API_BASE } from '../../DashboardApp'
 
 export default function LoginScreen({ onLogin }) {
   const [pin,     setPin]     = useState('')
@@ -11,7 +12,7 @@ export default function LoginScreen({ onLogin }) {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/dashboard/auth', {
+      const r = await fetch(`${API_BASE}/api/dashboard/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),

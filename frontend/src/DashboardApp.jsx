@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import './index.css'
-import LoginScreen    from './components/dashboard/LoginScreen'
+import LoginScreen     from './components/dashboard/LoginScreen'
 import DashboardScreen from './components/dashboard/DashboardScreen'
+
+// Di dev: kosong (pakai Vite proxy ke localhost:3001)
+// Di Vercel/prod: isi VITE_API_URL=https://backend-kamu.com di env Vercel
+export const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export default function DashboardApp() {
   const [token, setToken] = useState(() => sessionStorage.getItem('dashboard_token'))
@@ -9,7 +13,7 @@ export default function DashboardApp() {
   // Validate stored token on mount
   useEffect(() => {
     if (!token) return
-    fetch('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/api/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => { if (r.status === 401) { setToken(null); sessionStorage.removeItem('dashboard_token') } })
       .catch(() => {})
   }, [])
@@ -24,7 +28,7 @@ export default function DashboardApp() {
     }
   }, [])
 
-  const handleLogin = (t) => { sessionStorage.setItem('dashboard_token', t); setToken(t) }
+  const handleLogin  = (t) => { sessionStorage.setItem('dashboard_token', t); setToken(t) }
   const handleLogout = () => { sessionStorage.removeItem('dashboard_token'); setToken(null) }
 
   if (!token) return <LoginScreen onLogin={handleLogin} />

@@ -270,6 +270,16 @@ app.get('/api/dashboard/stats', requireDashboardAuth, asyncHandler(async (_req, 
 }))
 
 // ---------------------------------------------------------------------------
+// Serve frontend build (production / kiosk mode)
+// Aktif jika folder frontend/dist ada — jalankan `npm run build` di frontend dulu
+// ---------------------------------------------------------------------------
+const FRONTEND_DIST = path.resolve(__dirname, '../frontend/dist')
+if (fs.existsSync(FRONTEND_DIST)) {
+  app.use(express.static(FRONTEND_DIST))
+  app.get('*', (_req, res) => res.sendFile(path.join(FRONTEND_DIST, 'index.html')))
+}
+
+// ---------------------------------------------------------------------------
 // Error handler
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line no-unused-vars
@@ -278,4 +288,9 @@ app.use((err, req, res, _next) => {
   res.status(err.status || 500).json({ error: err.message })
 })
 
-app.listen(PORT, () => console.log(`SatuRuang backend → http://localhost:${PORT}`))
+app.listen(PORT, () => {
+  console.log(`SatuRuang backend → http://localhost:${PORT}`)
+  if (fs.existsSync(FRONTEND_DIST)) {
+    console.log(`Frontend build    → http://localhost:${PORT}/login (dashboard owner)`)
+  }
+})
