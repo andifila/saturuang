@@ -24,7 +24,7 @@ const midtrans = new midtransClient.CoreApi({
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
 })
 
-const PRICE_TABLE = { 2: 15000, 4: 25000, 8: 40000 }
+const PRICE_TABLE = { 2: 20000, 4: 30000 }
 const TTL_MS      = 30 * 60 * 1000 // auto-purge transaksi setelah 30 menit
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))

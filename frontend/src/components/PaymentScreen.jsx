@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 const POLL_INTERVAL_MS = 2000
 const SIM_SUCCESS_SECS = 6
-const PRICE_TABLE      = { 2: 15000, 4: 25000, 8: 40000 }
+const PRICE_TABLE      = { 2: 20000, 4: 30000 }
 const formatRupiah     = n => `Rp ${n.toLocaleString('id-ID')}`
 
 // ── QrBox: real QR image + skeleton loading ───────────────────────────────────

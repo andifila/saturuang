@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 const PHOTO_OPTIONS = [
-  { value: 2, label: '2 Foto', desc: 'Strip Pendek', price: 'Rp 15.000' },
-  { value: 4, label: '4 Foto', desc: 'Strip Klasik', price: 'Rp 25.000', popular: true },
-  { value: 8, label: '8 Foto', desc: 'Edisi Lengkap', price: 'Rp 40.000' },
+  { value: 2, label: '2 Foto', desc: 'Strip Pendek', price: 'Rp 20.000' },
+  { value: 4, label: '4 Foto', desc: 'Strip Klasik', price: 'Rp 30.000', popular: true },
 ]
 
 export default function ConfigScreen({ onDone }) {
