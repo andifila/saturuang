@@ -108,8 +108,14 @@ async function compositePhoto(photos, templateId, outputDir, orderId) {
   }
 
   // 4b. Template PNG transparan — gunakan pilihan user, fallback ke default per jenis strip
-  const templateFile = templateId ? `${templateId}.png` : spec.template
-  const templatePath = path.join(TEMPLATES_DIR, templateFile)
+  // Whitelist: templateId hanya boleh huruf, angka, underscore, hyphen — cegah path traversal
+  const safeId = templateId && /^[A-Za-z0-9_-]+$/.test(templateId) ? templateId : null
+  const templateFile = safeId ? `${safeId}.png` : spec.template
+  const templatePath = path.resolve(TEMPLATES_DIR, templateFile)
+  // Defense-in-depth: pastikan resolved path tidak keluar dari TEMPLATES_DIR
+  if (!templatePath.startsWith(path.resolve(TEMPLATES_DIR) + path.sep)) {
+    throw Object.assign(new Error('Invalid template'), { status: 400 })
+  }
   if (fs.existsSync(templatePath)) {
     layers.push({ input: templatePath, left: 0,       top: 0 })
     layers.push({ input: templatePath, left: STRIP_W, top: 0 })
