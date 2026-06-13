@@ -4,6 +4,8 @@ const cors = require('cors')
 const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
+const si = require('systeminformation')
 const midtransClient = require('midtrans-client')
 const { sendPhotoEmail } = require('./mailer')
 const { printPhoto } = require('./printer')
@@ -11,12 +13,16 @@ const { compositePhoto } = require('./composer')
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const OUTPUTS_DIR = path.resolve(__dirname, 'outputs')
+const OUTPUTS_DIR   = path.resolve(__dirname, 'outputs')
+const TEMPLATES_DIR = path.resolve(__dirname, 'templates')
+const SERVER_START  = Date.now()
 
 if (!fs.existsSync(OUTPUTS_DIR)) fs.mkdirSync(OUTPUTS_DIR, { recursive: true })
 
-// In-memory store: orderId -> { status: 'pending' | 'success' }
-const transactions = new Map()
+// In-memory stores
+const transactions     = new Map() // orderId → { status }
+const transactionLog   = []        // persistent log untuk dashboard
+const dashboardSessions = new Map() // token → expiry (ms)
 
 const midtrans = new midtransClient.CoreApi({
   isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
@@ -25,8 +31,8 @@ const midtrans = new midtransClient.CoreApi({
 })
 
 const PRICE_TABLE   = { 2: 20000, 4: 30000 }
-const TTL_MS        = 30 * 60 * 1000 // auto-purge transaksi setelah 30 menit
-const TEMPLATES_DIR = path.resolve(__dirname, 'templates')
+const TTL_MS        = 30 * 60 * 1000
+const DASHBOARD_PIN = process.env.DASHBOARD_PIN || '1234'
 
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173' }))
 app.use(express.json({ limit: '80mb' }))
@@ -37,27 +43,16 @@ app.use('/templates', express.static(TEMPLATES_DIR))
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Returns the absolute path to a file in outputs/ after validating that:
-//   1. The filename matches a safe pattern (no path traversal chars)
-//   2. The resolved path actually lives inside OUTPUTS_DIR
-//   3. The file exists on disk
 function resolveOutputFile(filename) {
   if (!filename || !/^[\w-]+\.(jpg|jpeg|png)$/i.test(filename)) {
-    const err = new Error('Nama file tidak valid')
-    err.status = 400
-    throw err
+    const err = new Error('Nama file tidak valid'); err.status = 400; throw err
   }
   const fullPath = path.join(OUTPUTS_DIR, filename)
-  // Extra guard: join can still produce a path inside the dir, but verify explicitly
   if (!fullPath.startsWith(OUTPUTS_DIR + path.sep)) {
-    const err = new Error('Akses path tidak diizinkan')
-    err.status = 403
-    throw err
+    const err = new Error('Akses path tidak diizinkan'); err.status = 403; throw err
   }
   if (!fs.existsSync(fullPath)) {
-    const err = new Error('File tidak ditemukan')
-    err.status = 404
-    throw err
+    const err = new Error('File tidak ditemukan'); err.status = 404; throw err
   }
   return fullPath
 }
@@ -66,115 +61,99 @@ function asyncHandler(fn) {
   return (req, res, next) => fn(req, res).catch(next)
 }
 
+function requireDashboardAuth(req, res, next) {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+  const expiry = token && dashboardSessions.get(token)
+  if (!expiry || expiry < Date.now()) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  next()
+}
+
+function isToday(ts) {
+  const now = new Date(), d = new Date(ts)
+  return d.getFullYear() === now.getFullYear()
+    && d.getMonth()    === now.getMonth()
+    && d.getDate()     === now.getDate()
+}
+
 // ---------------------------------------------------------------------------
-// Routes
+// Routes — Kiosk
 // ---------------------------------------------------------------------------
 
-// POST /api/process-image
-// Body  : { photos: string[] (base64 dataURLs), template: string | null }
-// Return: { url: string, filename: string }
 app.post('/api/process-image', asyncHandler(async (req, res) => {
   const { photos, template, orderId } = req.body
-  if (!Array.isArray(photos) || photos.length === 0) {
+  if (!Array.isArray(photos) || photos.length === 0)
     return res.status(400).json({ error: 'Array photos wajib diisi' })
-  }
   const outputPath = await compositePhoto(photos, template || null, OUTPUTS_DIR, orderId || null)
-  const filename = path.basename(outputPath)
-  res.json({ url: `/outputs/${filename}`, filename })
+  res.json({ url: `/outputs/${path.basename(outputPath)}`, filename: path.basename(outputPath) })
 }))
 
-// POST /api/send-email
-// Body  : { email: string, filename: string }
-// Return: { ok: true }
 app.post('/api/send-email', asyncHandler(async (req, res) => {
   const { email, filename } = req.body
   if (!email) return res.status(400).json({ error: 'Email wajib diisi' })
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return res.status(400).json({ error: 'Format email tidak valid' })
-  }
-  const filePath = resolveOutputFile(filename)
-  await sendPhotoEmail(email, filePath)
+  await sendPhotoEmail(email, resolveOutputFile(filename))
   res.json({ ok: true })
 }))
 
-// POST /api/print
-// Body  : { filename: string }
-// Return: { ok: true }
 app.post('/api/print', asyncHandler(async (req, res) => {
-  const { filename } = req.body
-  const filePath = resolveOutputFile(filename)
-  await printPhoto(filePath)
+  await printPhoto(resolveOutputFile(req.body.filename))
   res.json({ ok: true })
 }))
 
-// POST /api/generate-qris
-// Body  : { totalPhotos: number }
-// Return: { orderId: string, qrCodeUrl: string, price: number }
 app.post('/api/generate-qris', asyncHandler(async (req, res) => {
   const totalPhotos = Number(req.body.totalPhotos)
   const price = PRICE_TABLE[totalPhotos]
-  if (!price) {
-    return res.status(400).json({ error: 'Jumlah foto tidak valid' })
-  }
+  if (!price) return res.status(400).json({ error: 'Jumlah foto tidak valid' })
 
   const orderId = `SR-${Date.now()}`
 
   const chargeResponse = await midtrans.charge({
     payment_type: 'gopay',
-    transaction_details: {
-      order_id: orderId,
-      gross_amount: price,
-    },
-    gopay: {
-      enable_callback: false,
-    },
-    item_details: [{
-      id: `PHOTO-${totalPhotos}`,
-      price,
-      quantity: 1,
-      name: `SatuRuang ${totalPhotos} Foto`,
-    }],
+    transaction_details: { order_id: orderId, gross_amount: price },
+    gopay: { enable_callback: false },
+    item_details: [{ id: `PHOTO-${totalPhotos}`, price, quantity: 1, name: `SatuRuang ${totalPhotos} Foto` }],
   })
 
   const qrAction = chargeResponse.actions?.find(a => a.name === 'generate-qr-code')
-  if (!qrAction?.url) {
+  if (!qrAction?.url)
     return res.status(502).json({ error: 'Gagal mendapatkan URL QRIS dari Midtrans' })
-  }
 
   transactions.set(orderId, { status: 'pending' })
   setTimeout(() => transactions.delete(orderId), TTL_MS)
+
+  // Catat ke log dashboard
+  transactionLog.push({ orderId, timestamp: new Date(), totalPhotos, price, status: 'pending' })
+
   res.json({ orderId, qrCodeUrl: qrAction.url, price })
 }))
 
-// POST /api/payment-webhook (dipanggil oleh server Midtrans)
 app.post('/api/payment-webhook', asyncHandler(async (req, res) => {
   const { order_id, status_code, gross_amount, signature_key, transaction_status, fraud_status } = req.body
 
-  // Validasi signature Midtrans: SHA512(orderId + statusCode + grossAmount + serverKey)
   const expected = crypto
     .createHash('sha512')
     .update(`${order_id}${status_code}${gross_amount}${process.env.MIDTRANS_SERVER_KEY}`)
     .digest('hex')
-
-  if (expected !== signature_key) {
+  if (expected !== signature_key)
     return res.status(403).json({ error: 'Signature tidak valid' })
-  }
 
-  const settled =
-    transaction_status === 'settlement' ||
-    (transaction_status === 'capture' && fraud_status === 'accept')
+  const settled = transaction_status === 'settlement'
+    || (transaction_status === 'capture' && fraud_status === 'accept')
 
-  if (settled && transactions.has(order_id)) {
-    transactions.get(order_id).status = 'success'
+  if (settled) {
+    if (transactions.has(order_id)) transactions.get(order_id).status = 'success'
+    const logEntry = transactionLog.findLast(t => t.orderId === order_id)
+    if (logEntry) logEntry.status = 'success'
   }
 
   res.json({ ok: true })
 }))
 
-// GET /api/health
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
-// GET /api/templates — list PNG files in backend/templates/
 app.get('/api/templates', (_req, res) => {
   if (!fs.existsSync(TEMPLATES_DIR)) return res.json([])
   const files = fs.readdirSync(TEMPLATES_DIR).filter(f => /\.png$/i.test(f))
@@ -185,26 +164,82 @@ app.get('/api/templates', (_req, res) => {
   })))
 })
 
-// GET /api/check-status/:orderId (polling dari frontend)
 app.get('/api/check-status/:orderId', (req, res) => {
   const { orderId } = req.params
-  if (!/^SR-\d+$/.test(orderId)) {
+  if (!/^SR-\d+$/.test(orderId))
     return res.status(400).json({ error: 'Order ID tidak valid' })
-  }
   const tx = transactions.get(orderId)
   res.json({ status: tx ? tx.status : 'not_found' })
 })
+
+// ---------------------------------------------------------------------------
+// Routes — Dashboard
+// ---------------------------------------------------------------------------
+
+app.post('/api/dashboard/auth', (req, res) => {
+  const { pin } = req.body
+  if (typeof pin !== 'string' || pin.length !== DASHBOARD_PIN.length) {
+    return res.status(401).json({ error: 'PIN salah' })
+  }
+  // Constant-time comparison — cegah timing attack
+  const match = crypto.timingSafeEqual(Buffer.from(pin), Buffer.from(DASHBOARD_PIN))
+  if (!match) return res.status(401).json({ error: 'PIN salah' })
+
+  const token = crypto.randomBytes(32).toString('hex')
+  dashboardSessions.set(token, Date.now() + 8 * 60 * 60 * 1000) // 8 jam
+  res.json({ token })
+})
+
+app.get('/api/dashboard/stats', requireDashboardAuth, asyncHandler(async (_req, res) => {
+  // System
+  const mem = process.memoryUsage()
+  let cpuTemp = null
+  try { const t = await si.cpuTemperature(); cpuTemp = t.main ?? null } catch {}
+
+  const outputFiles = fs.existsSync(OUTPUTS_DIR)
+    ? fs.readdirSync(OUTPUTS_DIR).filter(f => /\.(jpg|jpeg|png)$/i.test(f)).length
+    : 0
+
+  // Today
+  const todayLogs    = transactionLog.filter(t => isToday(t.timestamp))
+  const successLogs  = todayLogs.filter(t => t.status === 'success')
+  const pendingLogs  = todayLogs.filter(t => t.status === 'pending')
+
+  res.json({
+    system: {
+      uptime:      Math.floor(process.uptime()),
+      memUsed:     mem.heapUsed,
+      memTotal:    os.totalmem(),
+      memFree:     os.freemem(),
+      cpuTemp,
+      cpuModel:    os.cpus()[0]?.model?.split('@')[0]?.trim() || 'N/A',
+      platform:    os.platform(),
+      hostname:    os.hostname(),
+      nodeVersion: process.version,
+      outputFiles,
+      serverStarted: SERVER_START,
+    },
+    today: {
+      label:    new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' }),
+      revenue:  successLogs.reduce((s, t) => s + t.price, 0),
+      sessions: successLogs.length,
+      pending:  pendingLogs.length,
+      byPackage: {
+        2: successLogs.filter(t => t.totalPhotos === 2).length,
+        4: successLogs.filter(t => t.totalPhotos === 4).length,
+      },
+    },
+    recent: [...transactionLog].reverse().slice(0, 30),
+  })
+}))
 
 // ---------------------------------------------------------------------------
 // Error handler
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
-  const status = err.status || 500
   console.error(`[${req.path}]`, err.message)
-  res.status(status).json({ error: err.message })
+  res.status(err.status || 500).json({ error: err.message })
 })
 
-app.listen(PORT, () => {
-  console.log(`SatuRuang backend → http://localhost:${PORT}`)
-})
+app.listen(PORT, () => console.log(`SatuRuang backend → http://localhost:${PORT}`))
