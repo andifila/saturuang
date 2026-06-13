@@ -62,7 +62,7 @@ function StripPreview({ tmpl, photoCount, selected }) {
 
 // ─── VirtualKeyboard ──────────────────────────────────────────────────────────
 
-function Key({ label, onPress, compact }) {
+function Key({ label, onPress, compact, kiosk }) {
   const isWide    = ['123','ABC','.com','⌫'].includes(label)
   const isAccent  = label === '✓'
   const isSpecial = ['⌫','123','ABC','.com','✓','[SPACE]'].includes(label)
@@ -73,12 +73,17 @@ function Key({ label, onPress, compact }) {
       whileTap={{ scale: 0.85, opacity: 0.7 }}
       className="flex items-center justify-center rounded-xl font-semibold select-none"
       style={{
-        height: compact ? 36 : 46,
+        height: compact ? 36 : kiosk ? 60 : 46,
         ...(compact
           ? { flex: label === '[SPACE]' ? '4 1 0' : isWide ? '1.5 1 0' : '1 1 0', minWidth: 0 }
-          : { minWidth: label === '[SPACE]' ? 200 : isWide ? 76 : 52, flexGrow: label === '[SPACE]' ? 1 : 0 }
+          : {
+              minWidth: label === '[SPACE]'
+                ? (kiosk ? 240 : 200)
+                : isWide ? (kiosk ? 96 : 76) : (kiosk ? 68 : 52),
+              flexGrow: label === '[SPACE]' ? 1 : 0,
+            }
         ),
-        fontSize: compact ? (isSpecial ? 8 : 12) : (isSpecial ? 10 : 15),
+        fontSize: compact ? (isSpecial ? 8 : 12) : kiosk ? (isSpecial ? 13 : 20) : (isSpecial ? 10 : 15),
         letterSpacing: isSpecial ? '0.1em' : 0,
         background: isAccent ? 'linear-gradient(135deg,#c9a96e,#d4b87a)'
           : label === '⌫' ? 'rgba(255,255,255,0.07)'
@@ -92,7 +97,7 @@ function Key({ label, onPress, compact }) {
   )
 }
 
-function VirtualKeyboard({ value, onChange, onClose, compact }) {
+function VirtualKeyboard({ value, onChange, onClose, compact, kiosk }) {
   const [mode, setMode] = useState('alpha')
   const rows = mode === 'alpha' ? ROWS_ALPHA : ROWS_NUM
   const handleKey = useCallback((key) => {
@@ -106,29 +111,34 @@ function VirtualKeyboard({ value, onChange, onClose, compact }) {
   }, [value, onChange, onClose])
   return (
     <motion.div
-      className={`fixed bottom-0 left-0 right-0 z-50 flex flex-col ${compact ? 'gap-1 px-2 pb-2 pt-2' : 'gap-1.5 px-4 pb-4 pt-3'}`}
+      className={`fixed bottom-0 left-0 right-0 z-50 flex flex-col ${
+        compact ? 'gap-1 px-2 pb-2 pt-2'
+        : kiosk  ? 'gap-2 px-8 pb-8 pt-5'
+        :          'gap-1.5 px-4 pb-4 pt-3'
+      }`}
       style={{ background: 'rgba(16,16,20,0.98)', backdropFilter: 'blur(24px)', borderTop: '1px solid #2e2e36' }}
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={{ type: 'spring', stiffness: 400, damping: 38 }}
     >
-      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-1"
+      <div className={`flex items-center gap-3 px-4 rounded-xl mb-1 ${kiosk ? 'py-4' : 'py-2.5'}`}
            style={{ background: '#1a1a1f', border: '1px solid #2e2e36' }}>
-        <span className="text-[10px] tracking-widest shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>EMAIL</span>
-        <span className="flex-1 text-sm font-medium truncate"
+        <span className={`${kiosk ? 'text-xs' : 'text-[10px]'} tracking-widest shrink-0`}
+              style={{ color: 'rgba(255,255,255,0.3)' }}>EMAIL</span>
+        <span className={`flex-1 ${kiosk ? 'text-base' : 'text-sm'} font-medium truncate`}
               style={{ color: value ? 'white' : 'rgba(255,255,255,0.25)' }}>
           {value || 'nama@email.com'}
         </span>
         {value && (
           <button onPointerDown={(e) => { e.preventDefault(); onChange('') }}
-                  className="text-[10px] px-2 py-1 rounded-lg"
+                  className={`${kiosk ? 'text-sm px-3 py-2' : 'text-[10px] px-2 py-1'} rounded-lg`}
                   style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.07)' }}>
             hapus
           </button>
         )}
       </div>
       {rows.map((row, ri) => (
-        <div key={ri} className={`flex justify-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
-          {row.map((key) => <Key key={key} label={key} onPress={handleKey} compact={compact} />)}
+        <div key={ri} className={`flex justify-center ${compact ? 'gap-1' : kiosk ? 'gap-2' : 'gap-1.5'}`}>
+          {row.map((key) => <Key key={key} label={key} onPress={handleKey} compact={compact} kiosk={kiosk} />)}
         </div>
       ))}
     </motion.div>
@@ -182,10 +192,14 @@ export default function PreviewScreen({ photos, onRestart }) {
   const [emailState,       setEmailState]        = useState('idle')
   const [printState,       setPrintState]        = useState('idle')
   const [isMobile,         setIsMobile]          = useState(() => window.innerWidth < 768)
+  const [isKiosk,          setIsKiosk]           = useState(() => window.innerWidth >= 1024)
   const [backendStatus,    setBackendStatus]      = useState('checking') // checking | online | offline
 
   useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth < 768)
+    const h = () => {
+      setIsMobile(window.innerWidth < 768)
+      setIsKiosk(window.innerWidth >= 1024)
+    }
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [])
@@ -379,7 +393,7 @@ export default function PreviewScreen({ photos, onRestart }) {
             state={printState}
             onClick={handlePrint}
             disabled={!filename}
-            className="w-full py-5 rounded-2xl text-sm"
+            className="w-full py-5 lg:py-7 rounded-2xl text-sm lg:text-base"
             style={{
               background: filename ? 'linear-gradient(135deg,#c9a96e,#d4b87a)' : 'rgba(201,169,110,0.15)',
               color: filename ? '#0d0d0f' : '#c9a96e',
@@ -416,7 +430,7 @@ export default function PreviewScreen({ photos, onRestart }) {
               state={emailState}
               onClick={handleSendEmail}
               disabled={!email || !filename}
-              className="w-full py-3.5 rounded-xl text-xs"
+              className="w-full py-3.5 lg:py-5 rounded-xl text-xs lg:text-sm"
               style={{
                 background: 'rgba(201,169,110,0.1)',
                 color: '#c9a96e',
@@ -453,7 +467,7 @@ export default function PreviewScreen({ photos, onRestart }) {
             <motion.div key="backdrop" className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowKeyboard(false)} />
-            <VirtualKeyboard key="kbd" value={email} onChange={setEmail} onClose={() => setShowKeyboard(false)} compact={isMobile} />
+            <VirtualKeyboard key="kbd" value={email} onChange={setEmail} onClose={() => setShowKeyboard(false)} compact={isMobile} kiosk={isKiosk} />
           </>
         )}
       </AnimatePresence>

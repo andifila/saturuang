@@ -41,7 +41,7 @@ export default function ConfigScreen({ onDone }) {
 
       {/* Photo count cards */}
       <motion.div
-        className="flex gap-4 flex-wrap justify-center"
+        className="flex gap-4 lg:gap-8 flex-wrap justify-center"
         variants={containerVariants}
         initial="hidden"
         animate="show"
@@ -53,33 +53,33 @@ export default function ConfigScreen({ onDone }) {
             onClick={() => setPhotos(opt.value)}
             whileTap={{ scale: 0.94 }}
             whileHover={{ scale: 1.04 }}
-            className="relative flex flex-col items-center gap-1 px-8 py-6 rounded-2xl border-2 transition-colors"
+            className="relative flex flex-col items-center gap-1 lg:gap-2 px-8 lg:px-12 py-6 lg:py-9 rounded-2xl border-2 transition-colors"
             style={{
               background: photos === opt.value ? 'rgba(201,169,110,0.12)' : '#1a1a1f',
               borderColor: photos === opt.value ? '#c9a96e' : '#2e2e36',
-              minWidth: 140,
+              minWidth: 'clamp(140px, 22vw, 280px)',
             }}
           >
             {opt.popular && (
               <span
-                className="absolute -top-3 text-xs px-3 py-1 rounded-full font-semibold tracking-wider"
+                className="absolute -top-3 text-xs lg:text-sm px-3 py-1 rounded-full font-semibold tracking-wider"
                 style={{ background: '#c9a96e', color: '#0d0d0f' }}
               >
                 POPULER
               </span>
             )}
             <span
-              className="text-4xl font-black"
+              className="text-4xl lg:text-6xl font-black"
               style={{ color: photos === opt.value ? '#c9a96e' : 'white' }}
             >
               {opt.value}
             </span>
-            <span className="text-white font-semibold">{opt.label}</span>
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <span className="text-white font-semibold lg:text-lg">{opt.label}</span>
+            <span className="text-xs lg:text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
               {opt.desc}
             </span>
             <span
-              className="text-sm font-bold mt-1"
+              className="text-sm lg:text-base font-bold mt-1"
               style={{ color: photos === opt.value ? '#c9a96e' : 'rgba(255,255,255,0.5)' }}
             >
               {opt.price}
@@ -93,7 +93,7 @@ export default function ConfigScreen({ onDone }) {
         onClick={() => onDone({ photos })}
         whileTap={{ scale: 0.96 }}
         whileHover={{ scale: 1.02 }}
-        className="w-full max-w-xs px-8 py-4 rounded-2xl font-bold tracking-widest uppercase text-sm"
+        className="w-full max-w-xs lg:max-w-sm px-8 py-4 lg:py-6 rounded-2xl font-bold tracking-widest uppercase text-sm lg:text-base"
         style={{
           background: 'linear-gradient(135deg, #c9a96e 0%, #d4b87a 100%)',
           color: '#0d0d0f',

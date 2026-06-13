@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 export default function StartScreen({ onStart }) {
   return (
     <motion.div
-      className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden"
+      className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden pb-[6vh]"
       style={{ background: '#0d0d0f' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

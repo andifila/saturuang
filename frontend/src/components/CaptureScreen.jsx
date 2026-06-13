@@ -84,7 +84,15 @@ export default function CaptureScreen({ totalPhotos, template, onDone }) {
     if (phase !== 'init') return
     let mounted = true
     navigator.mediaDevices
-      .getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' }, audio: false })
+      .getUserMedia({
+          video: {
+            facingMode: 'user',
+            width:       { ideal: 1080 },
+            height:      { ideal: 1920 },
+            aspectRatio: { ideal: 9 / 16 },
+          },
+          audio: false,
+        })
       .then((stream) => {
         if (!mounted) return
         streamRef.current = stream
