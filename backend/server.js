@@ -35,9 +35,9 @@ const TTL_MS        = 30 * 60 * 1000
 
 // Require a strong DASHBOARD_PIN — refuse to start without it
 const DASHBOARD_PIN = process.env.DASHBOARD_PIN
-if (!DASHBOARD_PIN || DASHBOARD_PIN.length < 6) {
-  console.error('[FATAL] DASHBOARD_PIN belum diset atau terlalu pendek (minimal 6 karakter).')
-  console.error('[FATAL] Tambahkan DASHBOARD_PIN=<pin-kuat-anda> ke file .env dan restart server.')
+if (!DASHBOARD_PIN || DASHBOARD_PIN.length < 4) {
+  console.error('[FATAL] DASHBOARD_PIN belum diset atau terlalu pendek (minimal 4 karakter).')
+  console.error('[FATAL] Tambahkan DASHBOARD_PIN=<pin-anda> ke file .env dan restart server.')
   process.exit(1)
 }
 
